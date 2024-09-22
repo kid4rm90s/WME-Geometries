@@ -273,8 +273,19 @@ var geometries = function() {
             if (features.length <= maxlabels) {
                 for (const attrib in features[0].attributes) {
                     let attribLC = attrib.toLowerCase()
-                    if(attribLC in attribSet) continue;
+                    if(labelname.test(attribLC) === true) {
+                        if(typeof features[0].attributes[attribLC] === 'string') {
+                            labelwith = "Labels: " + attrib;
+                            layerStyle.label = '${' + attrib + '}';
+                            attribSet.clear();
+                            break;
+                        }
+                    }
+                    if (attribLC in attribSet) continue;
                     attribSet.add(attribLC);
+                }
+
+                for (const attrib in attribSet) {
                     let attribClassName = "geometries-" + attribLC;
                     let attribIdName = "geometries-" + attribLC;
                     let listElement = document.createElement('li');
