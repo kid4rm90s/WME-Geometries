@@ -227,6 +227,7 @@ var geometries = function() {
         };
 
         let attribSet = new Set();
+        let lcAttribSet = new Set();
 
         var parser = formats[layerObj.fileext];
         parser.internalProjection = W.map.getProjectionObject();
@@ -278,14 +279,17 @@ var geometries = function() {
                             labelwith = "Labels: " + attrib;
                             layerStyle.label = '${' + attrib + '}';
                             attribSet.clear();
+                            lcAttribSet.clear();
                             break;
                         }
                     }
-                    if (attribLC in attribSet) continue;
-                    attribSet.add(attribLC);
+                    if (attribLC in lcAttribSet) continue;
+                    attribSet.add(attrib);
+                    lcAttribSet.add(attribLC);
                 }
 
-                for (const attrib in attribSet) {
+                for (const attrib of attribSet) {
+                    let attribLC = attrib.toLowerCase();
                     let attribClassName = "geometries-" + attribLC;
                     let attribIdName = "geometries-" + attribLC;
                     let listElement = document.createElement('li');
