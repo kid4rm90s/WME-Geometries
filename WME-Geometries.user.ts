@@ -274,7 +274,7 @@ var geometries = function() {
             for (const attrib in features[0].attributes) {
                 let attribLC = attrib.toLowerCase()
                 if(labelname.test(attribLC) === true) {
-                    if(typeof features[0].attributes[attribLC] === 'string' && features[0].attributes[attribLC] !== "null") {
+                    if(typeof features[0].attributes[attribLC] === 'string') {
                         labelwith = "Labels: " + attrib;
                         layerStyle.label = '${' + attrib + '}';
                         attribSet.clear();

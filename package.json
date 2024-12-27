@@ -1,0 +1,24 @@
+{
+    "name": "wme-geometries",
+    "devDependencies": {
+        "jquery": "^3.7.1",
+        "lz-string": "^1.5.0",
+        "tsc": "^2.0.4",
+        "wme-sdk": "https://web-assets.waze.com/wme_sdk_docs/beta/latest/wme-sdk-typings.tgz"
+    },
+    "version": "1.0.0",
+    "description": "",
+    "main": "WME-Geomtries.user.ts",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/karlsosha/WME-Geometries.git"
+    },
+    "private": true,
+    "dependencies": {
+        "wme-geometries": "file:"
+    }
+}
