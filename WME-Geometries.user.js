@@ -203,7 +203,9 @@ var geometries = function() {
                 var tObj = new layerStoreObj(e.target.result, color, fileext, filename);
                 storedLayers.push(tObj);
                 parseFile(tObj);
-                localStorage.WMEGeoLayers = LZString.compress(JSON.stringify(storedLayers));
+                let jsonString = JSON.stringify(storedLayers);
+                let compressedString = LZString.compress(jsonString);
+                localStorage.WMEGeoLayers = compressedString;
                 console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length/1000} kB in localStorage`);
             };
         })(file);
