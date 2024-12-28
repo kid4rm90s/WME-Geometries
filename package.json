@@ -1,9 +1,13 @@
 {
     "name": "wme-geometries",
     "devDependencies": {
+        "@types/i18n": "^0.13.12",
+        "@types/jquery": "^3.5.32",
+        "i18n": "^0.15.1",
         "jquery": "^3.7.1",
         "lz-string": "^1.5.0",
         "tsc": "^2.0.4",
+        "typescript": "^5.7.2",
         "wme-sdk": "https://web-assets.waze.com/wme_sdk_docs/beta/latest/wme-sdk-typings.tgz"
     },
     "version": "1.0.0",

@@ -14,23 +14,24 @@
 // @namespace           https://greasyfork.org/users/3339
 // @run-at              document-idle
 // ==/UserScript==
-/*
-
-    Blah Blah Blah
-
-*/
 
 /* JSHint Directives */
 /* globals OpenLayers: true */
-/* globals LZString: true */
 /* globals W: true */
-/* globals $: true */
-/* globals I18n: true */
 /* jshint bitwise: false */
 /* jshint evil: true */
 /* jshint esversion: 6 */
 
-var geometries = function() {
+"use strict";
+
+import { WmeSDK } from "wme-sdk";
+import * as LZString from "lz-string";
+import * as $ from "jquery";
+
+window.SDK_INITIALIZED.then(geometries);
+
+
+function geometries() {
     // maximum number of features that will be shown with labels
     var maxlabels = 3500;
 
@@ -55,7 +56,17 @@ var geometries = function() {
     var storedLayers = [];
 
     // delayed initialisation
-    setTimeout(bootstrap, 1654);
+    init();
+
+    if (!window.getWmeSdk) {
+        throw new Error("SDK is not installed");
+    }
+    const sdk: WmeSDK = window.getWmeSdk({
+        scriptId: "wme-geometries",
+        scriptName: "WME Geometries",
+    });
+
+    console.log(`SDK v ${sdk.getSDKVersion()} on ${sdk.getWMEVersion()} initialized`);
 
     function layerStoreObj(fileContent, color, fileext, filename) {
         this.fileContent = fileContent;
@@ -73,16 +84,6 @@ var geometries = function() {
             }
         } else {
             storedLayers = [];
-        }
-    }
-
-    function bootstrap() {
-        if (W.userscripts?.state.isReady) {
-            init();
-        } else {
-            document.addEventListener("wme-ready", init, {
-                once: true,
-            });
         }
     }
 
@@ -149,7 +150,8 @@ var geometries = function() {
     }
 
     function drawStateBoundary() {
-        if (!W.model.topState || !W.model.topState.attributes || !W.model.topState.attributes.geometry) {
+        let topState = sdk.DataModel.States.getTopState();
+        if (!topState) {
             console.info("WME Geometries: no state or geometry available, sorry");
             return;
         }
@@ -203,7 +205,9 @@ var geometries = function() {
                 var tObj = new layerStoreObj(e.target.result, color, fileext, filename);
                 storedLayers.push(tObj);
                 parseFile(tObj);
-                localStorage.WMEGeoLayers = LZString.compress(JSON.stringify(storedLayers));
+                let jsonString = JSON.stringify(storedLayers);
+                let compressedString = LZString.compress(jsonString);
+                localStorage.WMEGeoLayers = compressedString;
                 console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length/1000} kB in localStorage`);
             };
         })(file);
@@ -250,7 +254,7 @@ var geometries = function() {
         WME_Geometry.displayInLayerSwitcher = true;
 
         // hack in translation:
-        I18n.translations[I18n.locale].layers.name[layerid] = "WME Geometries: " + layerObj.filename;
+        I18n.translations[sdk.Settings.getLocale()].layers.name[layerid] = "WME Geometries: " + layerObj.filename;
 
         if (/"EPSG:3857"|:EPSG::3857"/.test(layerObj.fileContent)) {
             parser.externalProjection = EPSG_3857;
@@ -274,7 +278,7 @@ var geometries = function() {
             for (const attrib in features[0].attributes) {
                 let attribLC = attrib.toLowerCase()
                 if(labelname.test(attribLC) === true) {
-                    if(typeof features[0].attributes[attribLC] === 'string') {
+                    if(typeof features[0].attributes[attribLC] === 'string' && features[0].attributes[attribLC] !== "null") {
                         labelwith = "Labels: " + attrib;
                         layerStyle.label = '${' + attrib + '}';
                         attribSet.clear();
@@ -379,20 +383,20 @@ var geometries = function() {
         console.groupEnd();
     }
 };
-// ------------------------------------------------------------------------------------
+// // ------------------------------------------------------------------------------------
 
-// https://cdnjs.com/libraries/openlayers/x.y.z/
-function loadOLScript(filename, callback) {
-    var version = OpenLayers.VERSION_NUMBER.replace(/Release /, '');
-    console.info("Loading openlayers/" + version + "/" + filename + ".js");
+// // https://cdnjs.com/libraries/openlayers/x.y.z/
+// function loadOLScript(filename, callback) {
+//     var version = OpenLayers.VERSION_NUMBER.replace(/Release /, '');
+//     console.info("Loading openlayers/" + version + "/" + filename + ".js");
 
-    var openlayers = document.createElement('script');
-    openlayers.src = "https://cdnjs.cloudflare.com/ajax/libs/openlayers/" + version + "/" + filename + ".js";
-    openlayers.type = "text/javascript";
-    openlayers.onload = callback;
-    document.head.appendChild(openlayers);
-}
+//     var openlayers = document.createElement('script');
+//     openlayers.src = "https://cdnjs.cloudflare.com/ajax/libs/openlayers/" + version + "/" + filename + ".js";
+//     openlayers.type = "text/javascript";
+//     openlayers.onload = callback;
+//     document.head.appendChild(openlayers);
+// }
 
-geometries();
+// geometries();
 
-// ------------------------------------------------------------------------------------
+// // ------------------------------------------------------------------------------------
