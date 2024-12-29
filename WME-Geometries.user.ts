@@ -32,9 +32,6 @@ window.SDK_INITIALIZED.then(geometries);
 
 
 function geometries() {
-    // maximum number of features that will be shown with labels
-    var maxlabels = 3500;
-
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var labelname = /^name|name$/;
 
@@ -142,10 +139,10 @@ function geometries() {
 
         loadLayers();
 
-        console.groupEnd("WME Geometries: initialised");
+        console.groupEnd();
     }
 
-    function addFormat(format) {
+    function addFormat(format: string) {
         $('#formathelp')[0].innerText += ", " + format;
     }
 
