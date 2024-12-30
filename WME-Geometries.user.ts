@@ -7,7 +7,7 @@
 // @match               https://beta.waze.com/*
 // @exclude             https://www.waze.com/*user/*editor/*
 // @require             https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js
-// @require             https://cdn.jsdelivr.net/npm/js-kml-parser@1.0.2/dist/index.min.js
+// @require             https://cdn.jsdelivr.net/npm/@tmcw/togeojson@6.0.0/dist/togeojson.umd.min.js
 // @grant               none
 // @author              Timbones
 // @contributor         wlodek76
@@ -23,10 +23,9 @@
 // import { WmeSDK } from "wme-sdk";
 // import * as LZString from "lz-string";
 // import * as $ from "jquery";
-// import { KML } from "js-kml-parser";
+// import * as toGeoJSON from "@tmcw/togeojson"
 
 window.SDK_INITIALIZED.then(geometries);
-
 
 function geometries() {
     type MapFormatTypes = "GEOJSON" | "KML" | "WKT" | "GML" | "GMX";
@@ -40,7 +39,7 @@ function geometries() {
     const checkboxListID = "geometries-cb-list-id";
 
     // -------------------------------------------------------------
-    var geolist;
+    let geometryLayers: string[] = [];
 
     interface Parser {
         read: (content: string) => void;
@@ -55,15 +54,13 @@ function geometries() {
         KML = 1,
         WKT = 2,
         GML = 3,
-        GMX = 4
-    };
+        GMX = 4,
+    }
 
     let formathelp = "GeoJSON, KML, WKT, GPX, GML";
 
-
     var layerindex = 0;
     var storedLayers = [];
-
 
     if (!window.getWmeSdk) {
         throw new Error("SDK is not installed");
@@ -76,7 +73,9 @@ function geometries() {
     console.log(`SDK v ${sdk.getSDKVersion()} on ${sdk.getWMEVersion()} initialized`);
 
     // delayed initialisation
-    sdk.Events.once({eventName: "wme-map-data-loaded"}).then(()=> {init();});
+    sdk.Events.once({ eventName: "wme-map-data-loaded" }).then(() => {
+        init();
+    });
     class LayerStoreObj {
         fileContent: string;
         color: string;
@@ -90,8 +89,8 @@ function geometries() {
             this.fileExt = fileext;
             this.fileName = filename;
             this.formatType = <MapFormatTypes>fileext.toUpperCase();
-        };
-    };
+        }
+    }
 
     function loadLayers() {
         // Parse any locally stored layer objects
@@ -100,7 +99,7 @@ function geometries() {
             for (layerindex = 0; layerindex < storedLayers.length; ++layerindex) {
                 parseFile(storedLayers[layerindex]);
             }
-        } else if(localStorage.WMEGeoLayersFile !== undefined) {
+        } else if (localStorage.WMEGeoLayersFile !== undefined) {
             processGeometryFile(localStorage.WMEGeoLayersFile);
         } else {
             storedLayers = [];
@@ -109,47 +108,48 @@ function geometries() {
 
     // add interface to Settings tab
     function init() {
-        var geobox = document.createElement('div');
-        geobox.style.paddingTop = '6px';
+        var geobox = document.createElement("div");
+        geobox.style.paddingTop = "6px";
 
         console.group();
         let sidepanelAreas = $("#sidepanel-areas");
         sidepanelAreas.append(geobox);
 
-        var geotitle = document.createElement('h4');
-        geotitle.innerHTML = 'Import Geometry File';
+        var geotitle = document.createElement("h4");
+        geotitle.innerHTML = "Import Geometry File";
         geobox.appendChild(geotitle);
 
-        geolist = document.createElement('ul');
+        geolist = document.createElement("ul");
         geobox.appendChild(geolist);
 
-        var geoform = document.createElement('form');
+        var geoform = document.createElement("form");
         geobox.appendChild(geoform);
 
-        var inputfile = document.createElement('input');
-        inputfile.type = 'file';
-        inputfile.id = 'GeometryFile';
-        inputfile.title = '.geojson, .gml or .wkt';
-        inputfile.addEventListener('change', addGeometryLayer, false);
+        var inputfile = document.createElement("input");
+        inputfile.type = "file";
+        inputfile.id = "GeometryFile";
+        inputfile.title = ".geojson, .gml or .wkt";
+        inputfile.addEventListener("change", addGeometryLayer, false);
         geoform.appendChild(inputfile);
 
-        var notes = document.createElement('p');
+        var notes = document.createElement("p");
         notes.style.marginTop = "12px";
-        notes.innerHTML = `<b>Formats:</b> <span id="formathelp">${formathelp}</span><br> `
-            + '<b>Coords:</b> EPSG:4326, EPSG:4269, EPSG:3857';
+        notes.innerHTML =
+            `<b>Formats:</b> <span id="formathelp">${formathelp}</span><br> ` +
+            "<b>Coords:</b> EPSG:4326, EPSG:4269, EPSG:3857";
         geoform.appendChild(notes);
 
-        var inputstate = document.createElement('input');
-        inputstate.type = 'button';
-        inputstate.value = 'Draw State Boundary';
-        inputstate.title = 'Draw the boundary for the topmost state';
+        var inputstate = document.createElement("input");
+        inputstate.type = "button";
+        inputstate.value = "Draw State Boundary";
+        inputstate.title = "Draw the boundary for the topmost state";
         inputstate.onclick = drawStateBoundary;
         geoform.appendChild(inputstate);
 
-        var inputclear = document.createElement('input');
-        inputclear.type = 'button';
-        inputclear.value = 'Clear All';
-        inputclear.style.marginLeft = '8px';
+        var inputclear = document.createElement("input");
+        inputclear.type = "button";
+        inputclear.value = "Clear All";
+        inputclear.style.marginLeft = "8px";
         inputclear.onclick = removeGeometryLayers;
         geoform.appendChild(inputclear);
 
@@ -159,7 +159,7 @@ function geometries() {
     }
 
     function addFormat(format: string) {
-        $('#formathelp')[0].innerText += ", " + format;
+        $("#formathelp")[0].innerText += ", " + format;
     }
 
     function drawStateBoundary() {
@@ -187,44 +187,43 @@ function geometries() {
     // import selected file as a vector layer
     function addGeometryLayer() {
         // get the selected file from user
-        var fileList = document.getElementById('GeometryFile');
-        if(!fileList) return;
+        var fileList = document.getElementById("GeometryFile");
+        if (!fileList) return;
         var file = fileList.files[0];
-        fileList.value = '';
+        fileList.value = "";
 
         processGeometryFile(file);
     }
 
-    function processGeometryFile(file: File)
-    {
-        var fileext: string | undefined = file.name.split('.').pop();
-        var filename: string = file.name.replace('.' + fileext, '');
+    function processGeometryFile(file: File) {
+        var fileext: string | undefined = file.name.split(".").pop();
+        var filename: string = file.name.replace("." + fileext, "");
         fileext = fileext ? fileext.toUpperCase() : "";
 
         // add list item
-        var color = colorlist[(layerindex++) % colorlist.length];
-        var fileitem = document.createElement('li');
+        var color = colorlist[layerindex++ % colorlist.length];
+        var fileitem = document.createElement("li");
         fileitem.id = file.name.toLowerCase();
         fileitem.style.color = color;
-        fileitem.innerHTML = 'Loading...';
+        fileitem.innerHTML = "Loading...";
         geolist.appendChild(fileitem);
 
         // check if format is supported
         let parser = {
             read: null,
             internalProjection: null,
-            externalProjection: null
+            externalProjection: null,
         };
         if (!parser) {
-            fileitem.innerHTML = fileext.toUpperCase() + ' format not supported :(';
-            fileitem.style.color = 'red';
+            fileitem.innerHTML = fileext.toUpperCase() + " format not supported :(";
+            fileitem.style.color = "red";
             return;
         }
 
         // read the file into the new layer, and update the localStorage layer cache
         var reader = new FileReader();
-        reader.onload = (function(theFile) {
-            return function(e) {
+        reader.onload = (function (theFile) {
+            return function (e) {
                 var tObj = new LayerStoreObj(e.target.result, color, fileext, filename);
                 storedLayers.push(tObj);
                 parseFile(tObj);
@@ -232,13 +231,11 @@ function geometries() {
                 let compressedString = LZString.compress(jsonString);
                 try {
                     localStorage.WMEGeoLayers = compressedString;
-                    console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length/1000} kB in localStorage`);
-                }
-                catch(e) {
-                    if(e instanceof DOMException && e.name === "QuotaExceededError") {
+                    console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length / 1000} kB in localStorage`);
+                } catch (e) {
+                    if (e instanceof DOMException && e.name === "QuotaExceededError") {
                         localStorage.WMEGeoLayersFile = theFile;
-                    }
-                    else {
+                    } else {
                         throw e;
                     }
                 }
@@ -251,7 +248,9 @@ function geometries() {
     // Renders a layer object
     function parseFile(layerObj: LayerStoreObj) {
         let layerStyle = {
-            predicate: (() => {return true;}),
+            predicate: () => {
+                return true;
+            },
             style: {
                 strokeColor: layerObj.color,
                 strokeOpacity: 0.75,
@@ -259,31 +258,41 @@ function geometries() {
                 fillColor: layerObj.color,
                 fillOpacity: 0.1,
                 pointRadius: 6,
-                fontColor: 'white',
+                fontColor: "white",
                 labelOutlineColor: layerObj.color,
                 labelOutlineWidth: 4,
-                labelAlign: 'center'
-            }
+                labelAlign: "center",
+                label: "",
+            },
         };
 
-        let attribSet = new Set();
-        let lcAttribSet = new Set();
+        let attribSet: Set<string> = new Set();
+        let lcAttribSet: Set<string> = new Set();
 
         // add a new layer for the geometry
-        var layerid = 'wme_geometry_' + layerindex;
-        sdk.Map.addLayer({layerName: layerid, styleRules: [layerStyle]});
-        sdk.LayerSwitcher.addLayerCheckbox({name: layerid});
+        var layerid = "wme_geometry_" + layerindex;
+        sdk.Map.addLayer({ layerName: layerid, styleRules: [layerStyle] });
+        sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
+        sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
+        geometryLayers.push(layerid);
         let features: GeoJSON.Feature[] = [];
-        switch(layerObj.formatType) {
+        switch (layerObj.formatType) {
             case "GEOJSON":
                 let jsonObject: GeoJSON.FeatureCollection = JSON.parse(layerObj.fileContent);
                 features = jsonObject.features;
-                sdk.Map.addFeaturesToLayer({features: jsonObject.features, layerName: layerid});
+                sdk.Map.addFeaturesToLayer({ features: jsonObject.features, layerName: layerid });
                 break;
             case "KML":
-                let kml = new KML();
-                const geoJson: GeoJSON.FeatureCollection = kml.parse(layerObj.fileContent);
-                sdk.Map.addFeaturesToLayer({features: geoJson.features, layerName: layerid});
+                let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
+                const geoJson: GeoJSON.FeatureCollection = toGeoJSON.kml(kmlData);
+                features = geoJson.features;
+                let count: number = 0;
+                for (const f: GeoJSON.Feature of geoJson.features) {
+                    if (!f.id) {
+                        f.id = layerid + "_" + count.toString();
+                    }
+                    sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
+                }
                 break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
@@ -304,19 +313,22 @@ function geometries() {
         // var features = parser.read(layerObj.fileContent);
 
         // Append Div for Future Use for picking the Layer with Name
-        let layersList = document.createElement('ul');
-        layersList.className = "geometries-cb-list"
+        let layersList = document.createElement("ul");
+        layersList.className = "geometries-cb-list";
         layersList.id = checkboxListID;
         // check we have features to render
         if (features.length > 0) {
             // check which attribute can be used for labels
-            var labelwith = '(no labels)';
-            for (const attrib in features[0].attributes) {
-                let attribLC = attrib.toLowerCase()
-                if(labelname.test(attribLC) === true) {
-                    if(typeof features[0].attributes[attribLC] === 'string' && features[0].attributes[attribLC] !== "null") {
+            var labelwith = "(no labels)";
+            for (const attrib in features[0].properties) {
+                let attribLC = attrib.toLowerCase();
+                if (labelname.test(attribLC) === true) {
+                    if (
+                        typeof features[0].properties[attrib] === "string" &&
+                        features[0].properties[attrib] !== "null"
+                    ) {
                         labelwith = "Labels: " + attrib;
-                        layerStyle.label = '${' + attrib + '}';
+                        layerStyle.style.label = "${" + attrib + "}";
                         attribSet.clear();
                         lcAttribSet.clear();
                         break;
@@ -331,7 +343,7 @@ function geometries() {
                 let attribLC = attrib.toLowerCase();
                 let attribClassName = "geometries-" + attribLC;
                 let attribIdName = "geometries-" + attribLC;
-                let listElement = document.createElement('li');
+                let listElement = document.createElement("li");
                 let inputElement = document.createElement("input");
                 inputElement.className = attribClassName;
                 inputElement.id = attribIdName;
@@ -348,42 +360,45 @@ function geometries() {
                 //     attribIdName + "' name='geometries-name-label'/>" +
                 //     "<label class='geometries-cb-label'>" + attrib + "</label></li>"
                 layersList.appendChild(listElement);
-                $(inputElement).on("change", function(event) {
-                    console.log(event)
-                    if (typeof features[0].attributes[attrib] == 'string') {
-                        labelwith = 'Labels: ' + attrib;
-                        layerStyle.label = '${' + attrib + '}';
-                        WME_Geometry.styleMap = new OpenLayers.StyleMap(layerStyle);
+                $(inputElement).on("change", function (event) {
+                    console.log(event);
+                    if (
+                        features &&
+                        features[0] &&
+                        features[0].properties &&
+                        typeof features[0].properties[attrib] === "string"
+                    ) {
+                        labelwith = "Labels: " + attrib;
+                        layerStyle.style.label = "${" + attrib + "}";
                     }
-                })
+                });
             }
-            WME_Geometry.styleMap = new OpenLayers.StyleMap(layerStyle);
-
-            // add data to the map
-            WME_Geometry.addFeatures(features);
-            W.map.addLayer(WME_Geometry);
         }
 
         // When called as part of loading a new file, the list object will already have been created,
         // whereas if called as part of reloding cached data we need to create it here...
-        var liObj = document.getElementById((layerObj.filename + '.' + layerObj.fileext).toLowerCase());
+        var liObj = document.getElementById((layerObj.fileName + "." + layerObj.fileExt).toLowerCase());
         if (liObj === null) {
-            liObj = document.createElement('li');
-            liObj.id = (layerObj.filename + '.' + layerObj.fileext).toLowerCase();
+            liObj = document.createElement("li");
+            liObj.id = (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             liObj.style.color = layerObj.color;
             geolist.appendChild(liObj);
         }
 
         if (features.length === 0) {
-            liObj.innerHTML = 'No features loaded :(';
-            liObj.style.color = 'red';
-            WME_Geometry.destroy();
+            liObj.innerHTML = "No features loaded :(";
+            liObj.style.color = "red";
         } else {
-            liObj.innerHTML = layerObj.filename;
-            liObj.title = layerObj.fileext.toUpperCase() + " " + parser.externalProjection.projCode +
-                ": " + features.length + " features loaded\n" + labelwith;
+            liObj.innerHTML = layerObj.fileName;
+            liObj.title =
+                layerObj.fileExt.toUpperCase() +
+                // " " +
+                // parser.externalProjection.projCode +
+                ": " +
+                features.length +
+                " features loaded\n" +
+                labelwith;
             liObj.appendChild(layersList);
-
 
             console.info("WME Geometries: Loaded " + liObj.title);
         }
@@ -391,14 +406,16 @@ function geometries() {
 
     // clear all
     function removeGeometryLayers() {
-        var layers = W.map.getLayersBy("layerGroup", "wme_geometry");
-        for (var i = 0; i < layers.length; i++) {
-            layers[i].destroy();
+        for (const l of geometryLayers) {
+            sdk.Map.removeLayer({ layerName: l });
+            sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
         }
-        geolist.innerHTML = '';
+
+        geolist.innerHTML = "";
         layerindex = 0;
         // Clear the cached layers
-        localStorage.removeItem('WMEGeoLayers');
+        localStorage.removeItem("WMEGeoLayers");
+        localStorage.removeItem("WMEGeoLayerFile");
         storedLayers = [];
         return false;
     }
@@ -418,7 +435,7 @@ function geometries() {
     //     loadOLScript("lib/OpenLayers/Format/GML", function() {formats.GML = new OpenLayers.Format.GML(); addFormat("GML");} );
     //     console.groupEnd();
     // }
-};
+}
 // // ------------------------------------------------------------------------------------
 
 // // https://cdnjs.com/libraries/openlayers/x.y.z/
