@@ -7,6 +7,7 @@
 // @match               https://beta.waze.com/*
 // @exclude             https://www.waze.com/*user/*editor/*
 // @require             https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js
+// @require             https://cdn.jsdelivr.net/npm/js-kml-parser@1.0.2/dist/index.min.js
 // @grant               none
 // @author              Timbones
 // @contributor         wlodek76
@@ -15,26 +16,20 @@
 // @run-at              document-idle
 // ==/UserScript==
 
-/* JSHint Directives */
-/* globals OpenLayers: true */
 /* globals W: true */
-/* jshint bitwise: false */
-/* jshint evil: true */
-/* jshint esversion: 6 */
 
 "use strict";
 
-import { WmeSDK } from "wme-sdk";
-import * as LZString from "lz-string";
-import * as $ from "jquery";
+// import { WmeSDK } from "wme-sdk";
+// import * as LZString from "lz-string";
+// import * as $ from "jquery";
+// import { KML } from "js-kml-parser";
 
 window.SDK_INITIALIZED.then(geometries);
 
 
 function geometries() {
-    // maximum number of features that will be shown with labels
-    var maxlabels = 3500;
-
+    type MapFormatTypes = "GEOJSON" | "KML" | "WKT" | "GML" | "GMX";
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var labelname = /^name|name$/;
 
@@ -47,16 +42,28 @@ function geometries() {
     // -------------------------------------------------------------
     var geolist;
 
-    var formats;
-    var EPSG_4326; // lat,lon
-    var EPSG_4269; // NAD 83
-    var EPSG_3857; // WGS 84
+    interface Parser {
+        read: (content: string) => void;
+        internalProjection: string;
+        externalProjection: string;
+    }
+
+    let parser: Parser;
+
+    enum Formats {
+        GEOJSON = 0,
+        KML = 1,
+        WKT = 2,
+        GML = 3,
+        GMX = 4
+    };
+
+    let formathelp = "GeoJSON, KML, WKT, GPX, GML";
+
 
     var layerindex = 0;
     var storedLayers = [];
 
-    // delayed initialisation
-    init();
 
     if (!window.getWmeSdk) {
         throw new Error("SDK is not installed");
@@ -68,12 +75,23 @@ function geometries() {
 
     console.log(`SDK v ${sdk.getSDKVersion()} on ${sdk.getWMEVersion()} initialized`);
 
-    function layerStoreObj(fileContent, color, fileext, filename) {
-        this.fileContent = fileContent;
-        this.color = color;
-        this.fileext = fileext;
-        this.filename = filename;
-    }
+    // delayed initialisation
+    sdk.Events.once({eventName: "wme-map-data-loaded"}).then(()=> {init();});
+    class LayerStoreObj {
+        fileContent: string;
+        color: string;
+        fileExt: string;
+        fileName: string;
+        formatType: MapFormatTypes;
+
+        constructor(fileContent: string, color: string, fileext: string, filename: string) {
+            this.fileContent = fileContent;
+            this.color = color;
+            this.fileExt = fileext;
+            this.fileName = filename;
+            this.formatType = <MapFormatTypes>fileext.toUpperCase();
+        };
+    };
 
     function loadLayers() {
         // Parse any locally stored layer objects
@@ -82,6 +100,8 @@ function geometries() {
             for (layerindex = 0; layerindex < storedLayers.length; ++layerindex) {
                 parseFile(storedLayers[layerindex]);
             }
+        } else if(localStorage.WMEGeoLayersFile !== undefined) {
+            processGeometryFile(localStorage.WMEGeoLayersFile);
         } else {
             storedLayers = [];
         }
@@ -89,19 +109,12 @@ function geometries() {
 
     // add interface to Settings tab
     function init() {
-        var formathelp = 'GeoJSON, WKT';
-        formats = { 'GEOJSON':new OpenLayers.Format.GeoJSON(),
-            'WKT':new OpenLayers.Format.WKT() };
-        patchOpenLayers(); // patch adds KML, GPX and TXT formats
-
-        EPSG_4326 = new OpenLayers.Projection("EPSG:4326"); // lat,lon
-        EPSG_4269 = new OpenLayers.Projection("EPSG:4269"); // NAD 83
-        EPSG_3857 = new OpenLayers.Projection("EPSG:3857"); // WGS 84
         var geobox = document.createElement('div');
         geobox.style.paddingTop = '6px';
 
-        console.group("WME Geometries: Initialising for Editor");
-        $("#sidepanel-areas").append(geobox);
+        console.group();
+        let sidepanelAreas = $("#sidepanel-areas");
+        sidepanelAreas.append(geobox);
 
         var geotitle = document.createElement('h4');
         geotitle.innerHTML = 'Import Geometry File';
@@ -142,10 +155,10 @@ function geometries() {
 
         loadLayers();
 
-        console.groupEnd("WME Geometries: initialised");
+        console.groupEnd();
     }
 
-    function addFormat(format) {
+    function addFormat(format: string) {
         $('#formathelp')[0].innerText += ", " + format;
     }
 
@@ -175,12 +188,18 @@ function geometries() {
     function addGeometryLayer() {
         // get the selected file from user
         var fileList = document.getElementById('GeometryFile');
+        if(!fileList) return;
         var file = fileList.files[0];
         fileList.value = '';
 
-        var fileext = file.name.split('.').pop();
-        var filename = file.name.replace('.' + fileext, '');
-        fileext = fileext.toUpperCase();
+        processGeometryFile(file);
+    }
+
+    function processGeometryFile(file: File)
+    {
+        var fileext: string | undefined = file.name.split('.').pop();
+        var filename: string = file.name.replace('.' + fileext, '');
+        fileext = fileext ? fileext.toUpperCase() : "";
 
         // add list item
         var color = colorlist[(layerindex++) % colorlist.length];
@@ -191,8 +210,12 @@ function geometries() {
         geolist.appendChild(fileitem);
 
         // check if format is supported
-        var parser = formats[fileext];
-        if (typeof parser == 'undefined') {
+        let parser = {
+            read: null,
+            internalProjection: null,
+            externalProjection: null
+        };
+        if (!parser) {
             fileitem.innerHTML = fileext.toUpperCase() + ' format not supported :(';
             fileitem.style.color = 'red';
             return;
@@ -202,13 +225,23 @@ function geometries() {
         var reader = new FileReader();
         reader.onload = (function(theFile) {
             return function(e) {
-                var tObj = new layerStoreObj(e.target.result, color, fileext, filename);
+                var tObj = new LayerStoreObj(e.target.result, color, fileext, filename);
                 storedLayers.push(tObj);
                 parseFile(tObj);
                 let jsonString = JSON.stringify(storedLayers);
                 let compressedString = LZString.compress(jsonString);
-                localStorage.WMEGeoLayers = compressedString;
-                console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length/1000} kB in localStorage`);
+                try {
+                    localStorage.WMEGeoLayers = compressedString;
+                    console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length/1000} kB in localStorage`);
+                }
+                catch(e) {
+                    if(e instanceof DOMException && e.name === "QuotaExceededError") {
+                        localStorage.WMEGeoLayersFile = theFile;
+                    }
+                    else {
+                        throw e;
+                    }
+                }
             };
         })(file);
 
@@ -216,56 +249,59 @@ function geometries() {
     }
 
     // Renders a layer object
-    function parseFile(layerObj) {
-        var layerStyle = {
-            strokeColor: layerObj.color,
-            strokeOpacity: 0.75,
-            strokeWidth: 3,
-            fillColor: layerObj.color,
-            fillOpacity: 0.1,
-            pointRadius: 6,
-            fontColor: 'white',
-            labelOutlineColor: layerObj.color,
-            labelOutlineWidth: 4,
-            labelAlign: 'center'
+    function parseFile(layerObj: LayerStoreObj) {
+        let layerStyle = {
+            predicate: (() => {return true;}),
+            style: {
+                strokeColor: layerObj.color,
+                strokeOpacity: 0.75,
+                strokeWidth: 3,
+                fillColor: layerObj.color,
+                fillOpacity: 0.1,
+                pointRadius: 6,
+                fontColor: 'white',
+                labelOutlineColor: layerObj.color,
+                labelOutlineWidth: 4,
+                labelAlign: 'center'
+            }
         };
 
         let attribSet = new Set();
         let lcAttribSet = new Set();
 
-        var parser = formats[layerObj.fileext];
-        parser.internalProjection = W.map.getProjectionObject();
-        parser.externalProjection = EPSG_4326;
-
         // add a new layer for the geometry
         var layerid = 'wme_geometry_' + layerindex;
-        var WME_Geometry = new OpenLayers.Layer.Vector(
-            "Geometry: " + layerObj.filename, {
-                rendererOptions: {
-                    zIndexing: true
-                },
-                uniqueName: layerid,
-                shortcutKey: "S+" + layerindex,
-                layerGroup: 'wme_geometry'
-            }
-        );
-
-        WME_Geometry.setZIndex(-9999);
-        WME_Geometry.displayInLayerSwitcher = true;
+        sdk.Map.addLayer({layerName: layerid, styleRules: [layerStyle]});
+        sdk.LayerSwitcher.addLayerCheckbox({name: layerid});
+        let features: GeoJSON.Feature[] = [];
+        switch(layerObj.formatType) {
+            case "GEOJSON":
+                let jsonObject: GeoJSON.FeatureCollection = JSON.parse(layerObj.fileContent);
+                features = jsonObject.features;
+                sdk.Map.addFeaturesToLayer({features: jsonObject.features, layerName: layerid});
+                break;
+            case "KML":
+                let kml = new KML();
+                const geoJson: GeoJSON.FeatureCollection = kml.parse(layerObj.fileContent);
+                sdk.Map.addFeaturesToLayer({features: geoJson.features, layerName: layerid});
+                break;
+            default:
+                throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
+        }
 
         // hack in translation:
-        I18n.translations[sdk.Settings.getLocale()].layers.name[layerid] = "WME Geometries: " + layerObj.filename;
+        // I18n.translations[sdk.Settings.getLocale()].layers.name[layerid] = "WME Geometries: " + layerObj.filename;
 
-        if (/"EPSG:3857"|:EPSG::3857"/.test(layerObj.fileContent)) {
-            parser.externalProjection = EPSG_3857;
-        }
-        else if (/"EPSG:4269"|:EPSG::4269"/.test(layerObj.fileContent)) {
-            parser.externalProjection = EPSG_4269;
-        }
+        // if (/"EPSG:3857"|:EPSG::3857"/.test(layerObj.fileContent)) {
+        //     parser.externalProjection = EPSG_3857;
+        // }
+        // else if (/"EPSG:4269"|:EPSG::4269"/.test(layerObj.fileContent)) {
+        //     parser.externalProjection = EPSG_4269;
+        // }
         // else default to EPSG:4326
 
         // load geometry files
-        var features = parser.read(layerObj.fileContent);
+        // var features = parser.read(layerObj.fileContent);
 
         // Append Div for Future Use for picking the Layer with Name
         let layersList = document.createElement('ul');
@@ -370,18 +406,18 @@ function geometries() {
     // ------------------------------------------------------------------------------------
 
     // replace missing functions in OpenLayers 2.13.1
-    function patchOpenLayers() {
-        console.group("WME Geometries: Patching missing features...");
-        if (!OpenLayers.VERSION_NUMBER.match(/^Release [0-9.]*$/)) {
-            console.error("WME Geometries: OpenLayers version mismatch (" + OpenLayers.VERSION_NUMBER + ") - cannot apply patch");
-            return;
-        }
+    // function patchOpenLayers() {
+    //     console.group("WME Geometries: Patching missing features...");
+    //     if (!OpenLayers.VERSION_NUMBER.match(/^Release [0-9.]*$/)) {
+    //         console.error("WME Geometries: OpenLayers version mismatch (" + OpenLayers.VERSION_NUMBER + ") - cannot apply patch");
+    //         return;
+    //     }
 
-        loadOLScript("lib/OpenLayers/Format/KML", function() {formats.KML = new OpenLayers.Format.KML(); addFormat("KML");} );
-        loadOLScript("lib/OpenLayers/Format/GPX", function() {formats.GPX = new OpenLayers.Format.GPX(); addFormat("GPX");} );
-        loadOLScript("lib/OpenLayers/Format/GML", function() {formats.GML = new OpenLayers.Format.GML(); addFormat("GML");} );
-        console.groupEnd();
-    }
+    //     loadOLScript("lib/OpenLayers/Format/KML", function() {formats.KML = new OpenLayers.Format.KML(); addFormat("KML");} );
+    //     loadOLScript("lib/OpenLayers/Format/GPX", function() {formats.GPX = new OpenLayers.Format.GPX(); addFormat("GPX");} );
+    //     loadOLScript("lib/OpenLayers/Format/GML", function() {formats.GML = new OpenLayers.Format.GML(); addFormat("GML");} );
+    //     console.groupEnd();
+    // }
 };
 // // ------------------------------------------------------------------------------------
 
