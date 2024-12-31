@@ -17,14 +17,13 @@
 // ==/UserScript==
 /* globals W: true */
 "use strict";
-// import { WmeSDK } from "wme-sdk";
-// import * as LZString from "lz-string";
-// import * as $ from "jquery";
-// import * as toGeoJSON from "@tmcw/togeojson"
+import * as LZString from "lz-string";
+import * as $ from "jquery";
+import * as toGeoJSON from "@tmcw/togeojson";
 window.SDK_INITIALIZED.then(geometries);
 function geometries() {
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
-    var labelname = /^name|name$/;
+    var defaultLabelName = /^name|name$/;
     // each loaded file will be rendered with one of these colours in ascending order
     var colorlist = ["deepskyblue", "magenta", "limegreen", "orange", "teal", "grey"];
     // Id of div element for Checkboxes:
@@ -55,6 +54,7 @@ function geometries() {
     sdk.Events.once({ eventName: "wme-map-data-loaded" }).then(() => {
         init();
     });
+    sdk.Events.on({ eventName: "wme-map-move-end", eventHandler: () => loadLayers() });
     class LayerStoreObj {
         fileContent;
         color;
@@ -134,7 +134,7 @@ function geometries() {
             console.info("WME Geometries: no state or geometry available, sorry");
             return;
         }
-        var layerName = `(${W.model.topState.attributes.name})`;
+        var layerName = `(${topState.name})`;
         var layers = W.map.getLayersBy("layerGroup", "wme_geometry");
         for (var i = 0; i < layers.length; i++) {
             if (layers[i].name === "Geometry: " + layerName) {
@@ -142,7 +142,7 @@ function geometries() {
                 return;
             }
         }
-        var geo = formats.GEOJSON.parseGeometry(W.model.topState.attributes.geometry);
+        var geo = formats.GEOJSON.parseGeometry(topState.name);
         var json = formats.GEOJSON.write(geo);
         var obj = new layerStoreObj(json, "grey", "GEOJSON", layerName);
         parseFile(obj);
@@ -204,31 +204,19 @@ function geometries() {
         })(file);
         reader.readAsText(file);
     }
-    // Renders a layer object
-    function parseFile(layerObj) {
-        let layerStyle = {
+    let layerRules = {
+        defaultRule: {
             predicate: () => {
                 return true;
             },
-            style: {
-                strokeColor: layerObj.color,
-                strokeOpacity: 0.75,
-                strokeWidth: 3,
-                fillColor: layerObj.color,
-                fillOpacity: 0.1,
-                pointRadius: 6,
-                fontColor: "white",
-                labelOutlineColor: layerObj.color,
-                labelOutlineWidth: 4,
-                labelAlign: "center",
-                label: "",
-            },
-        };
-        let attribSet = new Set();
-        let lcAttribSet = new Set();
+            style: {},
+        },
+    };
+    // Renders a layer object
+    function parseFile(layerObj) {
         // add a new layer for the geometry
         var layerid = "wme_geometry_" + layerindex;
-        sdk.Map.addLayer({ layerName: layerid, styleRules: [layerStyle] });
+        sdk.Map.addLayer({ layerName: layerid, styleRules: Object.values(layerRules) });
         sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
         sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
         geometryLayers.push(layerid);
@@ -237,19 +225,12 @@ function geometries() {
             case "GEOJSON":
                 let jsonObject = JSON.parse(layerObj.fileContent);
                 features = jsonObject.features;
-                sdk.Map.addFeaturesToLayer({ features: jsonObject.features, layerName: layerid });
                 break;
             case "KML":
                 let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const geoJson = toGeoJSON.kml(kmlData);
                 features = geoJson.features;
                 let count = 0;
-                for (const f of geoJson.features) {
-                    if (!f.id) {
-                        f.id = layerid + "_" + count.toString();
-                    }
-                    sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
-                }
                 break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
@@ -269,28 +250,12 @@ function geometries() {
         let layersList = document.createElement("ul");
         layersList.className = "geometries-cb-list";
         layersList.id = checkboxListID;
+        let trigger = null;
         // check we have features to render
         if (features.length > 0) {
             // check which attribute can be used for labels
-            var labelwith = "(no labels)";
+            var labelWith = "(no labels)";
             for (const attrib in features[0].properties) {
-                let attribLC = attrib.toLowerCase();
-                if (labelname.test(attribLC) === true) {
-                    if (typeof features[0].properties[attrib] === "string" &&
-                        features[0].properties[attrib] !== "null") {
-                        labelwith = "Labels: " + attrib;
-                        layerStyle.style.label = "${" + attrib + "}";
-                        attribSet.clear();
-                        lcAttribSet.clear();
-                        break;
-                    }
-                }
-                if (attribLC in lcAttribSet)
-                    continue;
-                attribSet.add(attrib);
-                lcAttribSet.add(attribLC);
-            }
-            for (const attrib of attribSet) {
                 let attribLC = attrib.toLowerCase();
                 let attribClassName = "geometries-" + attribLC;
                 let attribIdName = "geometries-" + attribLC;
@@ -300,6 +265,7 @@ function geometries() {
                 inputElement.id = attribIdName;
                 inputElement.setAttribute("type", "radio");
                 inputElement.setAttribute("name", "geometries-name-label");
+                inputElement.textContent = attrib;
                 listElement.appendChild(inputElement);
                 let labelElement = document.createElement("label");
                 labelElement.textContent = attrib;
@@ -312,17 +278,15 @@ function geometries() {
                 //     "<label class='geometries-cb-label'>" + attrib + "</label></li>"
                 layersList.appendChild(listElement);
                 $(inputElement).on("change", function (event) {
-                    console.log(event);
-                    if (features &&
-                        features[0] &&
-                        features[0].properties &&
-                        typeof features[0].properties[attrib] === "string") {
-                        labelwith = "Labels: " + attrib;
-                        layerStyle.style.label = "${" + attrib + "}";
-                    }
+                    addFeatures(features, event);
                 });
+                if (defaultLabelName.test(attribLC) === true) {
+                    trigger = $(inputElement);
+                }
             }
         }
+        if (trigger)
+            trigger.trigger("change");
         // When called as part of loading a new file, the list object will already have been created,
         // whereas if called as part of reloding cached data we need to create it here...
         var liObj = document.getElementById((layerObj.fileName + "." + layerObj.fileExt).toLowerCase());
@@ -345,9 +309,38 @@ function geometries() {
                     ": " +
                     features.length +
                     " features loaded\n" +
-                    labelwith;
+                    labelWith;
             liObj.appendChild(layersList);
             console.info("WME Geometries: Loaded " + liObj.title);
+        }
+        function addFeatures(features, event) {
+            sdk.Map.removeAllFeaturesFromLayer({ layerName: layerid });
+            let count = 0;
+            let attrib = event.target.textContent;
+            for (const f of features) {
+                let layerStyle = {
+                    strokeColor: layerObj.color,
+                    strokeOpacity: 0.75,
+                    strokeWidth: 3,
+                    fillColor: layerObj.color,
+                    fillOpacity: 0.1,
+                    pointRadius: 6,
+                    fontColor: "white",
+                    labelOutlineColor: layerObj.color,
+                    labelOutlineWidth: 4,
+                    labelAlign: "center",
+                    label: "",
+                };
+                if (f.properties && typeof f.properties[attrib] === "string") {
+                    labelWith = "Labels: " + attrib;
+                    layerStyle.label = `${f.properties[attrib]}`;
+                }
+                if (!f.id) {
+                    f.id = layerid + "_" + count.toString();
+                }
+                Object.assign(layerRules.defaultRule.style, layerStyle);
+                sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
+            }
         }
     }
     // clear all
