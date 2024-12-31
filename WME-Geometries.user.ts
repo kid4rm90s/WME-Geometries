@@ -20,10 +20,10 @@
 
 "use strict";
 
-import { State, WmeSDK } from "wme-sdk";
-import * as LZString from "lz-string";
-import * as $ from "jquery";
-import * as toGeoJSON from "@tmcw/togeojson";
+// import { State, WmeSDK } from "wme-sdk";
+// import * as LZString from "lz-string";
+// import * as $ from "jquery";
+// import * as toGeoJSON from "@tmcw/togeojson";
 
 window.SDK_INITIALIZED.then(geometries);
 
@@ -39,7 +39,8 @@ function geometries() {
     const checkboxListID = "geometries-cb-list-id";
 
     // -------------------------------------------------------------
-    let geometryLayers: string[] = [];
+    type GeometryLayers  = Record<string, GeoJSON.Feature[]>;
+    let geometryLayers: GeometryLayers = {};
 
     interface Parser {
         read: (content: string) => void;
@@ -59,8 +60,9 @@ function geometries() {
 
     let formathelp = "GeoJSON, KML, WKT, GPX, GML";
 
-    var layerindex = 0;
+    var layerindex: number = 0;
     var storedLayers = [];
+    let selectedAttrib: string = "";
 
     if (!window.getWmeSdk) {
         throw new Error("SDK is not installed");
@@ -77,7 +79,20 @@ function geometries() {
         init();
     });
 
-    sdk.Events.on({eventName: "wme-map-move-end", eventHandler: () => loadLayers();})
+    function processMapUpdateEvent() {
+        for(const l in geometryLayers) {
+            sdk.Map.removeLayer({layerName: l});
+            sdk.LayerSwitcher.removeLayerCheckbox({name: l});
+        }
+        geometryLayers = {};
+        loadLayers();
+    }
+    sdk.Events.on({eventName: "wme-map-move-end", eventHandler: processMapUpdateEvent});
+    sdk.Events.on({eventName: "wme-map-zoom-changed", eventHandler: processMapUpdateEvent});
+    sdk.Events.on({eventName: "wme-layer-checkbox-toggled", eventHandler(payload) {
+        sdk.Map.setLayerVisibility({layerName: payload.name, visibility: payload.checked});
+    },})
+
     class LayerStoreObj {
         fileContent: string;
         color: string;
@@ -261,18 +276,18 @@ function geometries() {
         sdk.Map.addLayer({ layerName: layerid, styleRules: Object.values(layerRules) });
         sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
         sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
-        geometryLayers.push(layerid);
         let features: GeoJSON.Feature[] = [];
         switch (layerObj.formatType) {
             case "GEOJSON":
                 let jsonObject: GeoJSON.FeatureCollection = JSON.parse(layerObj.fileContent);
                 features = jsonObject.features;
+                geometryLayers[layerid] = features;
                 break;
             case "KML":
                 let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const geoJson: GeoJSON.FeatureCollection = toGeoJSON.kml(kmlData);
                 features = geoJson.features;
-                let count: number = 0;
+                geometryLayers[layerid] = features;
                 break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
@@ -326,13 +341,20 @@ function geometries() {
                 $(inputElement).on("change", function (event: Event) {
                     addFeatures(features, event);
                 });
-                if (defaultLabelName.test(attribLC) === true) {
+                if (selectedAttrib && selectedAttrib === attrib) 
+                {
+                    trigger = $(inputElement);
+                } 
+                else if(!selectedAttrib && defaultLabelName.test(attribLC) === true) {
                     trigger = $(inputElement);
                 }
             }
         }
 
-        if (trigger) trigger.trigger("change");
+        if (trigger) {
+            trigger[0].checked = true;
+            trigger.trigger("change");
+        }
 
         // When called as part of loading a new file, the list object will already have been created,
         // whereas if called as part of reloding cached data we need to create it here...
@@ -364,8 +386,7 @@ function geometries() {
 
         function addFeatures(features: GeoJSON.Feature[], event: Event) {
             sdk.Map.removeAllFeaturesFromLayer({ layerName: layerid });
-            let count: number = 0;
-            let attrib = event.target.textContent;
+            selectedAttrib = (event && event.target) ? event.target.textContent : "";
             for (const f of features) {
                 let layerStyle = {
                     strokeColor: layerObj.color,
@@ -380,13 +401,13 @@ function geometries() {
                     labelAlign: "center",
                     label: "",
                 };
-                if (f.properties && typeof f.properties[attrib] === "string") {
-                    labelWith = "Labels: " + attrib;
-                    layerStyle.label = `${f.properties[attrib]}`;
+                if (f.properties && typeof f.properties[selectedAttrib] === "string") {
+                    labelWith = "Labels: " + selectedAttrib;
+                    layerStyle.label = `${f.properties[selectedAttrib]}`;
                 }
 
                 if (!f.id) {
-                    f.id = layerid + "_" + count.toString();
+                    f.id = layerid + "_" + layerindex.toString();
                 }
                 Object.assign(layerRules.defaultRule.style, layerStyle);
                 sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
@@ -396,11 +417,12 @@ function geometries() {
 
     // clear all
     function removeGeometryLayers() {
-        for (const l of geometryLayers) {
+        for (const l in geometryLayers) {
             sdk.Map.removeLayer({ layerName: l });
             sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
         }
 
+        geometryLayers = {};
         geolist.innerHTML = "";
         layerindex = 0;
         // Clear the cached layers
