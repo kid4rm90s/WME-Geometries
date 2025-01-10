@@ -39,7 +39,7 @@ function geometries() {
     const checkboxListID = "geometries-cb-list-id";
 
     // -------------------------------------------------------------
-    type GeometryLayers  = Record<string, GeoJSON.Feature[]>;
+    type GeometryLayers = Record<string, GeoJSON.Feature[]>;
     let geometryLayers: GeometryLayers = {};
 
     interface Parser {
@@ -80,18 +80,21 @@ function geometries() {
     });
 
     function processMapUpdateEvent() {
-        for(const l in geometryLayers) {
-            sdk.Map.removeLayer({layerName: l});
-            sdk.LayerSwitcher.removeLayerCheckbox({name: l});
+        for (const l in geometryLayers) {
+            sdk.Map.removeLayer({ layerName: l });
+            sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
         }
         geometryLayers = {};
         loadLayers();
     }
-    sdk.Events.on({eventName: "wme-map-move-end", eventHandler: processMapUpdateEvent});
-    sdk.Events.on({eventName: "wme-map-zoom-changed", eventHandler: processMapUpdateEvent});
-    sdk.Events.on({eventName: "wme-layer-checkbox-toggled", eventHandler(payload) {
-        sdk.Map.setLayerVisibility({layerName: payload.name, visibility: payload.checked});
-    },})
+    // sdk.Events.on({ eventName: "wme-map-move-end", eventHandler: processMapUpdateEvent });
+    // sdk.Events.on({ eventName: "wme-map-zoom-changed", eventHandler: processMapUpdateEvent });
+    sdk.Events.on({
+        eventName: "wme-layer-checkbox-toggled",
+        eventHandler(payload) {
+            sdk.Map.setLayerVisibility({ layerName: payload.name, visibility: payload.checked });
+        },
+    });
 
     class LayerStoreObj {
         fileContent: string;
@@ -261,19 +264,58 @@ function geometries() {
 
         reader.readAsText(file);
     }
-    let layerRules = {
+    const layerConfig = {
         defaultRule: {
-            predicate: () => {
-                return true;
+            styleContext: {
+                strokeColor: (context) => {
+                    let style = context?.feature?.properties?.style;
+                    if (!style) return style;
+                    return style?.strokeColor;
+                },
+                fillColor: (context) => {
+                    let style = context?.feature?.properties?.style;
+                    if (!style) return style;
+                    return style?.strokeColor;
+                },
+                labelOutlineColor: (context) => {
+                    let style = context?.feature?.properties?.style;
+                    if (!style) return style;
+                    return style?.labelOutlineColor;
+                },
+                label: (context) => {
+                    let style = context?.feature?.properties?.style;
+                    if (!style) return style;
+                    return style?.label;
+                },
             },
-            style: {},
+            styleRules: [
+                {
+                    predicate: () => {
+                        return true;
+                    },
+                    style: {
+                        strokeColor: '${strokeColor}',
+                        strokeOpacity: 0.75,
+                        strokeWidth: 3,
+                        fillColor: '${fillColor}',
+                        fillOpacity: 0.1,
+                        pointRadius: 6,
+                        fontColor: "white",
+                        labelOutlineColor: '${labelOutlineColor}',
+                        labelOutlineWidth: 4,
+                        labelAlign: "center",
+                        label: '${label}',
+                    },
+                },
+            ],
+
         },
     };
     // Renders a layer object
     function parseFile(layerObj: LayerStoreObj) {
         // add a new layer for the geometry
         var layerid = "wme_geometry_" + layerindex;
-        sdk.Map.addLayer({ layerName: layerid, styleRules: Object.values(layerRules) });
+        sdk.Map.addLayer({ layerName: layerid, styleRules: layerConfig.defaultRule.styleRules, styleContext: layerConfig.defaultRule.styleContext });
         sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
         sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
         let features: GeoJSON.Feature[] = [];
@@ -341,11 +383,9 @@ function geometries() {
                 $(inputElement).on("change", function (event: Event) {
                     addFeatures(features, event);
                 });
-                if (selectedAttrib && selectedAttrib === attrib) 
-                {
+                if (selectedAttrib && selectedAttrib === attrib) {
                     trigger = $(inputElement);
-                } 
-                else if(!selectedAttrib && defaultLabelName.test(attribLC) === true) {
+                } else if (!selectedAttrib && defaultLabelName.test(attribLC) === true) {
                     trigger = $(inputElement);
                 }
             }
@@ -386,30 +426,30 @@ function geometries() {
 
         function addFeatures(features: GeoJSON.Feature[], event: Event) {
             sdk.Map.removeAllFeaturesFromLayer({ layerName: layerid });
-            selectedAttrib = (event && event.target) ? event.target.textContent : "";
+            selectedAttrib = event && event.target ? event.target.textContent : "";
             for (const f of features) {
-                let layerStyle = {
-                    strokeColor: layerObj.color,
-                    strokeOpacity: 0.75,
-                    strokeWidth: 3,
-                    fillColor: layerObj.color,
-                    fillOpacity: 0.1,
-                    pointRadius: 6,
-                    fontColor: "white",
-                    labelOutlineColor: layerObj.color,
-                    labelOutlineWidth: 4,
-                    labelAlign: "center",
-                    label: "",
-                };
                 if (f.properties && typeof f.properties[selectedAttrib] === "string") {
                     labelWith = "Labels: " + selectedAttrib;
-                    layerStyle.label = `${f.properties[selectedAttrib]}`;
+                    let layerStyle = {
+                        strokeColor: layerObj.color,
+                        strokeOpacity: 0.75,
+                        strokeWidth: 3,
+                        fillColor: layerObj.color,
+                        fillOpacity: 0.1,
+                        pointRadius: 6,
+                        fontColor: "white",
+                        labelOutlineColor: layerObj.color,
+                        labelOutlineWidth: 4,
+                        labelAlign: "center",
+                        label: `${f.properties[selectedAttrib]}`,
+                    };
+                    if(!f.properties?.style) f.properties.style = {};
+                    Object.assign(f.properties.style, layerStyle);
                 }
 
                 if (!f.id) {
                     f.id = layerid + "_" + layerindex.toString();
                 }
-                Object.assign(layerRules.defaultRule.style, layerStyle);
                 sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
             }
         }
