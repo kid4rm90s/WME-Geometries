@@ -290,6 +290,12 @@ function geometries() {
                 features = geoJson.features;
                 geometryLayers[layerid] = features;
                 break;
+            case "GPX":
+                let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
+                const gpxGeoGson = toGeoJSON.gpx(gpxData);
+                features = gpxGeoGson.features;
+                geometryLayers[layerid] = features;
+                break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
         }
@@ -384,15 +390,8 @@ function geometries() {
                     labelWith = "Labels: " + selectedAttrib;
                     let layerStyle = {
                         strokeColor: layerObj.color,
-                        strokeOpacity: 0.75,
-                        strokeWidth: 3,
                         fillColor: layerObj.color,
-                        fillOpacity: 0.1,
-                        pointRadius: 6,
-                        fontColor: "white",
                         labelOutlineColor: layerObj.color,
-                        labelOutlineWidth: 4,
-                        labelAlign: "center",
                         label: `${f.properties[selectedAttrib]}`,
                     };
                     if (!f.properties?.style)

@@ -28,7 +28,7 @@
 window.SDK_INITIALIZED.then(geometries);
 
 function geometries() {
-    type MapFormatTypes = "GEOJSON" | "KML" | "WKT" | "GML" | "GMX";
+    type MapFormatTypes = "GEOJSON" | "KML" | "WKT" | "GML" | "GMX" | "GPX";
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var defaultLabelName = /^name|name$/;
 
@@ -331,6 +331,12 @@ function geometries() {
                 features = geoJson.features;
                 geometryLayers[layerid] = features;
                 break;
+            case "GPX":
+                let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
+                const gpxGeoGson: GeoJSON.FeatureCollection = toGeoJSON.gpx(gpxData);
+                features = gpxGeoGson.features;
+                geometryLayers[layerid] = features;
+                break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
         }
@@ -432,15 +438,8 @@ function geometries() {
                     labelWith = "Labels: " + selectedAttrib;
                     let layerStyle = {
                         strokeColor: layerObj.color,
-                        strokeOpacity: 0.75,
-                        strokeWidth: 3,
                         fillColor: layerObj.color,
-                        fillOpacity: 0.1,
-                        pointRadius: 6,
-                        fontColor: "white",
                         labelOutlineColor: layerObj.color,
-                        labelOutlineWidth: 4,
-                        labelAlign: "center",
                         label: `${f.properties[selectedAttrib]}`,
                     };
                     if(!f.properties?.style) f.properties.style = {};
