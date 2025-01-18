@@ -23,6 +23,7 @@
     },
     "private": true,
     "dependencies": {
+        "prettier": "^3.4.2",
         "wme-geometries": "file:"
     }
 }
