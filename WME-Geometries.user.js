@@ -56,6 +56,8 @@ function geometries() {
         init();
     });
     function processMapUpdateEvent() {
+        if (Object.keys(geometryLayers).length === 0)
+            return;
         for (const l in geometryLayers) {
             sdk.Map.removeLayer({ layerName: l });
             sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
