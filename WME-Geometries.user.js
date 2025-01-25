@@ -17,7 +17,7 @@
 // ==/UserScript==
 /* globals W: true */
 "use strict";
-// import { State, WmeSDK } from "wme-sdk";
+// import { State, WmeSDK } from "wme-sdk-typings";
 // import * as LZString from "lz-string";
 // import * as $ from "jquery";
 // import * as toGeoJSON from "@tmcw/togeojson";
