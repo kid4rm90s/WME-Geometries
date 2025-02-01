@@ -13,7 +13,7 @@
       "types": [
         "lz-string",
         "i18n",
-        "wme-sdk"
+        "wme-sdk-typings"
       ]
     },
     "exclude": ["node_modules", "releases"],

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name                WME Geometries
-// @version             1.8
+// @version             2.0
 // @description         Import geometry files into Waze Map Editor. Supports GeoJSON, GML, WKT, KML and GPX.
 // @match               https://www.waze.com/*/editor*
 // @match               https://www.waze.com/editor*
@@ -8,6 +8,8 @@
 // @exclude             https://www.waze.com/*user/*editor/*
 // @require             https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js
 // @require             https://cdn.jsdelivr.net/npm/@tmcw/togeojson@6.0.0/dist/togeojson.umd.min.js
+// @require             https://unpkg.com/@terraformer/wkt
+// @require             https://cdn.jsdelivr.net/npm/gml2geojson/dist/gml2geojson.js
 // @grant               none
 // @author              Timbones
 // @contributor         wlodek76
@@ -17,10 +19,11 @@
 // ==/UserScript==
 /* globals W: true */
 "use strict";
-// import { State, WmeSDK } from "wme-sdk";
+// import { State, WmeSDK } from "wme-sdk-typings";
 // import * as LZString from "lz-string";
 // import * as $ from "jquery";
 // import * as toGeoJSON from "@tmcw/togeojson";
+// import * as Terraformer from '@terraformer/wkt';
 window.SDK_INITIALIZED.then(geometries);
 function geometries() {
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
@@ -296,6 +299,40 @@ function geometries() {
                 let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const gpxGeoGson = toGeoJSON.gpx(gpxData);
                 features = gpxGeoGson.features;
+                geometryLayers[layerid] = features;
+                break;
+            case "WKT":
+                const wktGeoJson = Terraformer.wktToGeoJSON(layerObj.fileContent);
+                switch (wktGeoJson.type) {
+                    case "Polygon":
+                        features = [{
+                                type: "Feature",
+                                properties: { "name": layerObj.fileName },
+                                geometry: wktGeoJson
+                            }];
+                        break;
+                    case "GeometryCollection":
+                        features = [];
+                        for (let g in wktGeoJson.geometries) {
+                            features.push({
+                                type: "Feature",
+                                properties: { name: layerObj.fileName },
+                                geometry: wktGeoJson.geometries[g]
+                            });
+                        }
+                        break;
+                    default:
+                        let errorMessage = "Unknown Type has been Encountered";
+                        console.error(errorMessage);
+                        throw Error(errorMessage);
+                        break;
+                }
+                geometryLayers[layerid] = features;
+                break;
+            case "GML":
+                // let gmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
+                const gmlGeoJSON = gml2geojson.parseGML(layerObj.fileContent);
+                features = gmlGeoJSON.features;
                 geometryLayers[layerid] = features;
                 break;
             default:
