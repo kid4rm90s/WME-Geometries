@@ -27,7 +27,7 @@
     "dependencies": {
         "@terraformer/wkt": "^2.2.1",
         "jquery": "^3.7.1",
-        "prettier": "^3.4.2",
+        "prettier": "^3.5.1",
         "wme-geometries": "file:"
     }
 }
