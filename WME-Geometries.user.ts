@@ -279,7 +279,7 @@ function geometries() {
                 fillColor: (context) => {
                     let style = context?.feature?.properties?.style;
                     if (!style) return style;
-                    return style?.strokeColor;
+                    return style?.fillColor;
                 },
                 labelOutlineColor: (context) => {
                     let style = context?.feature?.properties?.style;
@@ -472,13 +472,13 @@ function geometries() {
             sdk.Map.removeAllFeaturesFromLayer({ layerName: layerid });
             selectedAttrib = event && event.target ? event.target.textContent : "";
             for (const f of features) {
-                if (f.properties && typeof f.properties[selectedAttrib] === "string") {
+                if (f.properties) {
                     labelWith = "Labels: " + selectedAttrib;
                     let layerStyle = {
                         strokeColor: layerObj.color,
                         fillColor: layerObj.color,
                         labelOutlineColor: layerObj.color,
-                        label: `${f.properties[selectedAttrib]}`,
+                        label: (typeof f.properties[selectedAttrib] === "string") ? `${f.properties[selectedAttrib]}` : "undefined",
                     };
                     if(!f.properties?.style) f.properties.style = {};
                     Object.assign(f.properties.style, layerStyle);
