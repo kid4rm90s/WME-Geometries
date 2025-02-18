@@ -260,17 +260,17 @@ function geometries() {
                         return true;
                     },
                     style: {
-                        strokeColor: '${strokeColor}',
+                        strokeColor: "${strokeColor}",
                         strokeOpacity: 0.75,
                         strokeWidth: 3,
-                        fillColor: '${fillColor}',
+                        fillColor: "${fillColor}",
                         fillOpacity: 0.1,
                         pointRadius: 6,
                         fontColor: "white",
-                        labelOutlineColor: '${labelOutlineColor}',
+                        labelOutlineColor: "${labelOutlineColor}",
                         labelOutlineWidth: 4,
                         labelAlign: "center",
-                        label: '${label}',
+                        label: "${label}",
                     },
                 },
             ],
@@ -280,7 +280,11 @@ function geometries() {
     function parseFile(layerObj) {
         // add a new layer for the geometry
         var layerid = "wme_geometry_" + layerindex;
-        sdk.Map.addLayer({ layerName: layerid, styleRules: layerConfig.defaultRule.styleRules, styleContext: layerConfig.defaultRule.styleContext });
+        sdk.Map.addLayer({
+            layerName: layerid,
+            styleRules: layerConfig.defaultRule.styleRules,
+            styleContext: layerConfig.defaultRule.styleContext,
+        });
         sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
         sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
         let features = [];
@@ -306,11 +310,13 @@ function geometries() {
                 const wktGeoJson = Terraformer.wktToGeoJSON(layerObj.fileContent);
                 switch (wktGeoJson.type) {
                     case "Polygon":
-                        features = [{
+                        features = [
+                            {
                                 type: "Feature",
-                                properties: { "name": layerObj.fileName },
-                                geometry: wktGeoJson
-                            }];
+                                properties: { name: layerObj.fileName },
+                                geometry: wktGeoJson,
+                            },
+                        ];
                         break;
                     case "GeometryCollection":
                         features = [];
@@ -318,7 +324,7 @@ function geometries() {
                             features.push({
                                 type: "Feature",
                                 properties: { name: layerObj.fileName },
-                                geometry: wktGeoJson.geometries[g]
+                                geometry: wktGeoJson.geometries[g],
                             });
                         }
                         break;
@@ -399,6 +405,7 @@ function geometries() {
         function createClearButton(layerObj, layerid) {
             let clearButtonObject = document.createElement("button");
             clearButtonObject.textContent = "Clear Layer";
+            clearButtonObject.name = "clear-" + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             clearButtonObject.id = "clear-" + layerid;
             clearButtonObject.className = "clear-layer-button";
             return clearButtonObject;
@@ -433,6 +440,15 @@ function geometries() {
             $(".clear-layer-button").on("click", function () {
                 let clearLayerId = this.id;
                 clearLayerId = clearLayerId.replace("clear-", "");
+                let clearListId = "";
+                if (this.hasAttribute("name")) {
+                    clearListId = this.getAttribute("name");
+                    clearListId = clearListId?.replace("clear-", "");
+                    if (clearListId) {
+                        let elem = document.getElementById(clearListId);
+                        elem?.remove();
+                    }
+                }
                 sdk.Map.removeLayer({ layerName: clearLayerId });
                 sdk.LayerSwitcher.removeLayerCheckbox({ name: clearLayerId });
                 let listId = this.textContent?.replace("Clear ", "");
@@ -453,7 +469,9 @@ function geometries() {
                         strokeColor: layerObj.color,
                         fillColor: layerObj.color,
                         labelOutlineColor: layerObj.color,
-                        label: (typeof f.properties[selectedAttrib] === "string") ? `${f.properties[selectedAttrib]}` : "undefined",
+                        label: typeof f.properties[selectedAttrib] === "string"
+                            ? `${f.properties[selectedAttrib]}`
+                            : "undefined",
                     };
                     if (!f.properties?.style)
                         f.properties.style = {};
