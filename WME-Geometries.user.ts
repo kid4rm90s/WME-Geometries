@@ -35,7 +35,7 @@ function geometries() {
     var defaultLabelName = /^name|name$/;
 
     // each loaded file will be rendered with one of these colours in ascending order
-    var colorlist = ["deepskyblue", "magenta", "limegreen", "orange", "teal", "grey"];
+    var colorlist = ["deepskyblue", "magenta", "limegreen", "orange", "teal", "navy", "fuchsia", "maroon"];
 
     // Id of div element for Checkboxes:
     const checkboxListID = "geometries-cb-list-id";
@@ -315,6 +315,7 @@ function geometries() {
 
         },
     };
+
     // Renders a layer object
     function parseFile(layerObj: LayerStoreObj) {
         // add a new layer for the geometry
@@ -440,6 +441,13 @@ function geometries() {
             trigger.trigger("change");
         }
 
+        function createClearButton(layerObj: LayerStoreObj, layerid: string) : HTMLButtonElement {
+            let clearButtonObject = document.createElement("button");
+            clearButtonObject.textContent = "Clear Layer";
+            clearButtonObject.id = "clear-"+layerid;
+            clearButtonObject.className = "clear-layer-button";
+            return clearButtonObject;
+        }
         // When called as part of loading a new file, the list object will already have been created,
         // whereas if called as part of reloding cached data we need to create it here...
         var liObj = document.getElementById((layerObj.fileName + "." + layerObj.fileExt).toLowerCase());
@@ -447,21 +455,6 @@ function geometries() {
             liObj = document.createElement("li");
             liObj.id = (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             liObj.style.color = layerObj.color;
-            let clearButtonObject = document.createElement("button");
-            clearButtonObject.textContent = "Clear " + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
-            clearButtonObject.id = "clear-"+layerid;
-            clearButtonObject.className = "clear-layer-button";
-            $(".clear-layer-button").on("click", function() {
-                let clearLayerId: string  = this.id;
-                clearLayerId = clearLayerId.replace("clear-", "");
-                sdk.Map.removeLayer({layerName: clearLayerId});
-                sdk.LayerSwitcher.removeLayerCheckbox({name: clearLayerId});
-                let listId = this.textContent?.replace("Clear ", "");
-                let elementToRemove = document.getElementById(listId);
-                elementToRemove?.remove();
-                this.remove();
-            })
-            liObj.appendChild(clearButtonObject);
             geolist.appendChild(liObj);
         }
 
@@ -479,8 +472,20 @@ function geometries() {
                 " features loaded\n" +
                 labelWith;
             liObj.appendChild(layersList);
-
+            let clearButtonObject = createClearButton(layerObj, layerid);
+            liObj.appendChild(clearButtonObject);
             console.info("WME Geometries: Loaded " + liObj.title);
+            $(".clear-layer-button").on("click", function() {
+                let clearLayerId: string  = this.id;
+                clearLayerId = clearLayerId.replace("clear-", "");
+                sdk.Map.removeLayer({layerName: clearLayerId});
+                sdk.LayerSwitcher.removeLayerCheckbox({name: clearLayerId});
+                let listId: string | undefined = this.textContent?.replace("Clear ", "");
+                if(!listId) return;
+                let elementToRemove = document.getElementById(listId);
+                elementToRemove?.remove();
+                this.remove();
+            });
         }
 
         function addFeatures(features: GeoJSON.Feature[], event: Event) {
