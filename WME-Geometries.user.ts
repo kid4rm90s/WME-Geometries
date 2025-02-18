@@ -24,7 +24,6 @@
 
 // import { State, WmeSDK } from "wme-sdk-typings";
 // import * as LZString from "lz-string";
-// import * as $ from "jquery";
 // import * as toGeoJSON from "@tmcw/togeojson";
 // import * as Terraformer from '@terraformer/wkt';
 
@@ -220,8 +219,9 @@ function geometries() {
     }
 
     function processGeometryFile(file: File) {
-        var fileext: string | undefined = file.name.split(".").pop();
-        var filename: string = file.name.replace("." + fileext, "");
+        var fileext: string | undefined = file?.name?.split(".").pop();
+        var filename: string = file?.name?.replace("." + fileext, "");
+        if(!fileext || !filename) return;
         fileext = fileext ? fileext.toUpperCase() : "";
 
         // add list item
@@ -447,6 +447,21 @@ function geometries() {
             liObj = document.createElement("li");
             liObj.id = (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             liObj.style.color = layerObj.color;
+            let clearButtonObject = document.createElement("button");
+            clearButtonObject.textContent = "Clear " + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
+            clearButtonObject.id = "clear-"+layerid;
+            clearButtonObject.className = "clear-layer-button";
+            $(".clear-layer-button").on("click", function() {
+                let clearLayerId: string  = this.id;
+                clearLayerId = clearLayerId.replace("clear-", "");
+                sdk.Map.removeLayer({layerName: clearLayerId});
+                sdk.LayerSwitcher.removeLayerCheckbox({name: clearLayerId});
+                let listId = this.textContent?.replace("Clear ", "");
+                let elementToRemove = document.getElementById(listId);
+                elementToRemove?.remove();
+                this.remove();
+            })
+            liObj.appendChild(clearButtonObject);
             geolist.appendChild(liObj);
         }
 

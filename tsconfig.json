@@ -13,7 +13,8 @@
       "types": [
         "lz-string",
         "i18n",
-        "wme-sdk-typings"
+        "wme-sdk-typings",
+        "jquery"
       ]
     },
     "exclude": ["node_modules", "releases"],

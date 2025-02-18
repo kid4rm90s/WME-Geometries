@@ -21,7 +21,6 @@
 "use strict";
 // import { State, WmeSDK } from "wme-sdk-typings";
 // import * as LZString from "lz-string";
-// import * as $ from "jquery";
 // import * as toGeoJSON from "@tmcw/togeojson";
 // import * as Terraformer from '@terraformer/wkt';
 window.SDK_INITIALIZED.then(geometries);
@@ -179,8 +178,10 @@ function geometries() {
         processGeometryFile(file);
     }
     function processGeometryFile(file) {
-        var fileext = file.name.split(".").pop();
-        var filename = file.name.replace("." + fileext, "");
+        var fileext = file?.name?.split(".").pop();
+        var filename = file?.name?.replace("." + fileext, "");
+        if (!fileext || !filename)
+            return;
         fileext = fileext ? fileext.toUpperCase() : "";
         // add list item
         var color = colorlist[layerindex++ % colorlist.length];
@@ -402,6 +403,21 @@ function geometries() {
             liObj = document.createElement("li");
             liObj.id = (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             liObj.style.color = layerObj.color;
+            let clearButtonObject = document.createElement("button");
+            clearButtonObject.textContent = "Clear " + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
+            clearButtonObject.id = "clear-" + layerid;
+            clearButtonObject.className = "clear-layer-button";
+            $(".clear-layer-button").on("click", function () {
+                let clearLayerId = this.id;
+                clearLayerId = clearLayerId.replace("clear-", "");
+                sdk.Map.removeLayer({ layerName: clearLayerId });
+                sdk.LayerSwitcher.removeLayerCheckbox({ name: clearLayerId });
+                let listId = this.textContent?.replace("Clear ", "");
+                let elementToRemove = document.getElementById(listId);
+                elementToRemove?.remove();
+                this.remove();
+            });
+            liObj.appendChild(clearButtonObject);
             geolist.appendChild(liObj);
         }
         if (features.length === 0) {
