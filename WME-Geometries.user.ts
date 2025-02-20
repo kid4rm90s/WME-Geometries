@@ -23,7 +23,6 @@
 "use strict";
 
 // import { State, WmeSDK } from "wme-sdk-typings";
-// import * as LZString from "lz-string";
 // import * as toGeoJSON from "@tmcw/togeojson";
 // import * as Terraformer from '@terraformer/wkt';
 
@@ -35,7 +34,8 @@ function geometries() {
     var defaultLabelName = /^name|name$/;
 
     // each loaded file will be rendered with one of these colours in ascending order
-    var colorlist = ["deepskyblue", "magenta", "limegreen", "orange", "teal", "navy", "fuchsia", "maroon"];
+    var colorList: Set<string> = new Set(["deepskyblue", "magenta", "limegreen", "orange", "teal", "navy", "fuchsia", "maroon"]);
+    let usedColors: Set<string> = new Set();
 
     // Id of div element for Checkboxes:
     const checkboxListID = "geometries-cb-list-id";
@@ -58,12 +58,11 @@ function geometries() {
         WKT = 2,
         GML = 3,
         GMX = 4,
-    }
+    };
 
-    let formathelp = "GeoJSON, KML, WKT, GPX, GML";
+    let formathelp: string = "GeoJSON, KML, WKT, GPX, GML";
 
     var layerindex: number = 0;
-    var storedLayers = [];
     let selectedAttrib: string = "";
 
     if (!window.getWmeSdk) {
@@ -81,15 +80,15 @@ function geometries() {
         init();
     });
 
-    function processMapUpdateEvent() {
-        if (Object.keys(geometryLayers).length === 0) return;
-        for (const l in geometryLayers) {
-            sdk.Map.removeLayer({ layerName: l });
-            sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
-        }
-        geometryLayers = {};
-        loadLayers();
-    }
+    // function processMapUpdateEvent() {
+    //     if (Object.keys(geometryLayers).length === 0) return;
+    //     for (const l in geometryLayers) {
+    //         sdk.Map.removeLayer({ layerName: l });
+    //         sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
+    //     }
+    //     geometryLayers = {};
+    //     loadLayers();
+    // }
     // sdk.Events.on({ eventName: "wme-map-move-end", eventHandler: processMapUpdateEvent });
     // sdk.Events.on({ eventName: "wme-map-zoom-changed", eventHandler: processMapUpdateEvent });
     sdk.Events.on({
@@ -117,16 +116,9 @@ function geometries() {
 
     function loadLayers() {
         // Parse any locally stored layer objects
-        if (localStorage.WMEGeoLayers !== undefined) {
-            storedLayers = JSON.parse(LZString.decompress(localStorage.WMEGeoLayers));
-            for (layerindex = 0; layerindex < storedLayers.length; ++layerindex) {
-                parseFile(storedLayers[layerindex]);
-            }
-        } else if (localStorage.WMEGeoLayersFile !== undefined) {
-            processGeometryFile(localStorage.WMEGeoLayersFile);
-        } else {
-            storedLayers = [];
-        }
+        let files: Record<string, File> = JSON.parse(localStorage.getItem("WMEGeoLayers") || "[]");
+        for(const f in files)
+            processGeometryFile(files[f]);
     }
 
     // add interface to Settings tab
@@ -218,14 +210,22 @@ function geometries() {
         processGeometryFile(file);
     }
 
-    function processGeometryFile(file: File) {
+    function processGeometryFile(file) {
+        if(colorList.size === 0) {
+            console.error("Cannot add Any more Layers at this point");
+        }
         var fileext: string | undefined = file?.name?.split(".").pop();
-        var filename: string = file?.name?.replace("." + fileext, "");
-        if (!fileext || !filename) return;
+        var filename: string | undefined = file?.name?.replace("." + fileext, "");
+        if (!file || !file?.name || !fileext || !filename) return;
         fileext = fileext ? fileext.toUpperCase() : "";
 
         // add list item
-        var color = colorlist[layerindex++ % colorlist.length];
+        var color: string | undefined = colorList.values().next().value;
+        if(!color) {
+            console.error("Cannot add Any more Layers at this point");
+        }
+        colorList.delete(color);
+        usedColors.add(color);
         var fileitem = document.createElement("li");
         fileitem.id = file.name.toLowerCase();
         fileitem.style.color = color;
@@ -246,23 +246,13 @@ function geometries() {
 
         // read the file into the new layer, and update the localStorage layer cache
         var reader = new FileReader();
-        reader.onload = (function (theFile) {
-            return function (e) {
+        reader.onload = (function (theFile : File) {
+            return function (e : ProgressEvent<FileReader>) {
                 var tObj = new LayerStoreObj(e.target.result, color, fileext, filename);
-                storedLayers.push(tObj);
                 parseFile(tObj);
-                let jsonString = JSON.stringify(storedLayers);
-                let compressedString = LZString.compress(jsonString);
-                try {
-                    localStorage.WMEGeoLayers = compressedString;
-                    console.info(`WME Geometries stored ${localStorage.WMEGeoLayers.length / 1000} kB in localStorage`);
-                } catch (e) {
-                    if (e instanceof DOMException && e.name === "QuotaExceededError") {
-                        localStorage.WMEGeoLayersFile = theFile;
-                    } else {
-                        throw e;
-                    }
-                }
+                let filenames: Record<string, File> = JSON.parse(localStorage.getItem("WMEGeoLayers") || "[]");
+                filenames[color] = theFile;
+                localStorage.setItem("WMEGeoLayers", JSON.stringify(filenames));
             };
         })(file);
 
@@ -318,7 +308,7 @@ function geometries() {
     // Renders a layer object
     function parseFile(layerObj: LayerStoreObj) {
         // add a new layer for the geometry
-        var layerid = "wme_geometry_" + layerindex;
+        var layerid = "wme_geometry_" + (++layerindex);
         sdk.Map.addLayer({
             layerName: layerid,
             styleRules: layerConfig.defaultRule.styleRules,
@@ -452,6 +442,7 @@ function geometries() {
             clearButtonObject.name = "clear-" + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             clearButtonObject.id = "clear-" + layerid;
             clearButtonObject.className = "clear-layer-button";
+            clearButtonObject.style.backgroundColor = layerObj.color;
             return clearButtonObject;
         }
         // When called as part of loading a new file, the list object will already have been created,
@@ -494,11 +485,17 @@ function geometries() {
                     }
                 }
                 sdk.Map.removeLayer({ layerName: clearLayerId });
+                delete geometryLayers[clearLayerId];
                 sdk.LayerSwitcher.removeLayerCheckbox({ name: clearLayerId });
                 let listId: string | undefined = this.textContent?.replace("Clear ", "");
                 if (!listId) return;
                 let elementToRemove = document.getElementById(listId);
                 elementToRemove?.remove();
+                let files: Record<string, File> = JSON.parse(localStorage.getItem("WMEGeoLayers") || "[]");
+                delete files[this.style.backgroundColor];
+                localStorage.setItem("WMEGeoLayers", JSON.stringify(files));
+                usedColors.delete(this.style.backgroundColor);
+                colorList.add(this.style.backgroundColor);
                 this.remove();
             });
         }
@@ -542,8 +539,10 @@ function geometries() {
         layerindex = 0;
         // Clear the cached layers
         localStorage.removeItem("WMEGeoLayers");
-        localStorage.removeItem("WMEGeoLayerFile");
-        storedLayers = [];
+        for(const c in usedColors) {
+            colorList.add(c);
+        }
+        usedColors.clear();
         return false;
     }
 
