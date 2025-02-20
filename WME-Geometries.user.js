@@ -10,6 +10,7 @@
 // @require             https://cdn.jsdelivr.net/npm/@tmcw/togeojson@6.0.0/dist/togeojson.umd.min.js
 // @require             https://unpkg.com/@terraformer/wkt
 // @require             https://cdn.jsdelivr.net/npm/gml2geojson/dist/gml2geojson.js
+// @require             https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js
 // @grant               none
 // @author              Timbones
 // @contributor         wlodek76
@@ -21,13 +22,24 @@
 "use strict";
 // import { State, WmeSDK } from "wme-sdk-typings";
 // import * as toGeoJSON from "@tmcw/togeojson";
-// import * as Terraformer from '@terraformer/wkt';
+// import * as Terraformer from "@terraformer/wkt";
+// import * as turf from "@turf/turf";
+// import { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 window.SDK_INITIALIZED.then(geometries);
 function geometries() {
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var defaultLabelName = /^name|name$/;
     // each loaded file will be rendered with one of these colours in ascending order
-    var colorList = new Set(["deepskyblue", "magenta", "limegreen", "orange", "teal", "navy", "fuchsia", "maroon"]);
+    var colorList = new Set([
+        "deepskyblue",
+        "magenta",
+        "limegreen",
+        "orange",
+        "teal",
+        "navy",
+        "fuchsia",
+        "maroon",
+    ]);
     let usedColors = new Set();
     // Id of div element for Checkboxes:
     const checkboxListID = "geometries-cb-list-id";
@@ -41,7 +53,6 @@ function geometries() {
         Formats[Formats["GML"] = 3] = "GML";
         Formats[Formats["GMX"] = 4] = "GMX";
     })(Formats || (Formats = {}));
-    ;
     let formathelp = "GeoJSON, KML, WKT, GPX, GML";
     var layerindex = 0;
     let selectedAttrib = "";
@@ -265,7 +276,7 @@ function geometries() {
     // Renders a layer object
     function parseFile(layerObj) {
         // add a new layer for the geometry
-        var layerid = "wme_geometry_" + (++layerindex);
+        var layerid = "wme_geometry_" + ++layerindex;
         sdk.Map.addLayer({
             layerName: layerid,
             styleRules: layerConfig.defaultRule.styleRules,
@@ -277,19 +288,28 @@ function geometries() {
         switch (layerObj.formatType) {
             case "GEOJSON":
                 let jsonObject = JSON.parse(layerObj.fileContent);
-                features = jsonObject.features;
+                {
+                    const flatFeatureJson = turf.flatten(jsonObject);
+                    features = flatFeatureJson.features;
+                }
                 geometryLayers[layerid] = features;
                 break;
             case "KML":
                 let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const geoJson = toGeoJSON.kml(kmlData);
-                features = geoJson.features;
+                {
+                    const flatFeatureJson = turf.flatten(geoJson);
+                    features = flatFeatureJson.features;
+                }
                 geometryLayers[layerid] = features;
                 break;
             case "GPX":
                 let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const gpxGeoGson = toGeoJSON.gpx(gpxData);
-                features = gpxGeoGson.features;
+                {
+                    const flatFeatureJson = turf.flatten(gpxGeoGson);
+                    features = flatFeatureJson.features;
+                }
                 geometryLayers[layerid] = features;
                 break;
             case "WKT":
@@ -320,12 +340,14 @@ function geometries() {
                         throw Error(errorMessage);
                         break;
                 }
-                geometryLayers[layerid] = features;
                 break;
             case "GML":
                 // let gmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 const gmlGeoJSON = gml2geojson.parseGML(layerObj.fileContent);
-                features = gmlGeoJSON.features;
+                {
+                    const flatFeatureJson = turf.flatten(gmlGeoJSON);
+                    features = flatFeatureJson.features;
+                }
                 geometryLayers[layerid] = features;
                 break;
             default:
@@ -472,6 +494,12 @@ function geometries() {
                 }
                 if (!f.id) {
                     f.id = layerid + "_" + layerindex.toString();
+                }
+                if (f.geometry.type === "Polygon") {
+                    let first = f.geometry.coordinates[0];
+                    let last = f.geometry.coordinates[f.geometry.coordinates.length - 1];
+                    if (first[0] != last[0] || first[1] !== last[1])
+                        f.geometry.coordinates.push(f.geometry.coordinates[0]);
                 }
                 sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
             }
