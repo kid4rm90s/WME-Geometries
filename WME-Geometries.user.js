@@ -37,7 +37,6 @@ function geometries() {
         "orange",
         "teal",
         "navy",
-        "fuchsia",
         "maroon",
     ]);
     let usedColors = new Set();
@@ -375,14 +374,14 @@ function geometries() {
             var labelWith = "(no labels)";
             for (const attrib in features[0].properties) {
                 let attribLC = attrib.toLowerCase();
-                let attribClassName = "geometries-" + attribLC;
-                let attribIdName = "geometries-" + attribLC;
+                let attribClassName = `geometries-${layerindex}-` + attribLC;
+                let attribIdName = `geometries-${layerindex}-` + attribLC;
                 let listElement = document.createElement("li");
                 let inputElement = document.createElement("input");
                 inputElement.className = attribClassName;
                 inputElement.id = attribIdName;
                 inputElement.setAttribute("type", "radio");
-                inputElement.setAttribute("name", "geometries-name-label");
+                inputElement.setAttribute("name", `geometries-name-label-${layerindex}`);
                 inputElement.textContent = attrib;
                 listElement.appendChild(inputElement);
                 let labelElement = document.createElement("label");
