@@ -19,7 +19,6 @@
 // @run-at              document-idle
 // ==/UserScript==
 
-/* globals W: true */
 
 "use strict";
 
@@ -164,12 +163,12 @@ function geometries() {
             "<b>Coords:</b> EPSG:4326, EPSG:4269, EPSG:3857";
         geoform.appendChild(notes);
 
-        var inputstate = document.createElement("input");
-        inputstate.type = "button";
-        inputstate.value = "Draw State Boundary";
-        inputstate.title = "Draw the boundary for the topmost state";
-        inputstate.onclick = drawStateBoundary;
-        geoform.appendChild(inputstate);
+        // var inputstate = document.createElement("input");
+        // inputstate.type = "button";
+        // inputstate.value = "Draw State Boundary";
+        // inputstate.title = "Draw the boundary for the topmost state";
+        // inputstate.onclick = drawStateBoundary;
+        // geoform.appendChild(inputstate);
 
         var inputclear = document.createElement("input");
         inputclear.type = "button";
@@ -187,27 +186,27 @@ function geometries() {
         $("#formathelp")[0].innerText += ", " + format;
     }
 
-    function drawStateBoundary() {
-        let topState: State | null = sdk.DataModel.States.getTopState();
-        if (!topState) {
-            console.info("WME Geometries: no state or geometry available, sorry");
-            return;
-        }
+    // function drawStateBoundary() {
+    //     let topState: State | null = sdk.DataModel.States.getTopState();
+    //     if (!topState) {
+    //         console.info("WME Geometries: no state or geometry available, sorry");
+    //         return;
+    //     }
 
-        var layerName = `(${topState.name})`;
-        var layers = W.map.getLayersBy("layerGroup", "wme_geometry");
-        for (var i = 0; i < layers.length; i++) {
-            if (layers[i].name === "Geometry: " + layerName) {
-                console.info("WME Geometries: current state already loaded");
-                return;
-            }
-        }
+    //     var layerName = `(${topState.name})`;
+    //     var layers = W.map.getLayersBy("layerGroup", "wme_geometry");
+    //     for (var i = 0; i < layers.length; i++) {
+    //         if (layers[i].name === "Geometry: " + layerName) {
+    //             console.info("WME Geometries: current state already loaded");
+    //             return;
+    //         }
+    //     }
 
-        var geo = formats.GEOJSON.parseGeometry(topState.name);
-        var json = formats.GEOJSON.write(geo);
-        var obj = new layerStoreObj(json, "grey", "GEOJSON", layerName);
-        parseFile(obj);
-    }
+    //     var geo = formats.GEOJSON.parseGeometry(topState.name);
+    //     var json = formats.GEOJSON.write(geo);
+    //     var obj = new layerStoreObj(json, "grey", "GEOJSON", layerName);
+    //     parseFile(obj);
+    // }
 
     // import selected file as a vector layer
     function addGeometryLayer() {
@@ -331,26 +330,26 @@ function geometries() {
             case "GEOJSON":
                 let jsonObject: GeoJSON.FeatureCollection = JSON.parse(layerObj.fileContent);
                 {
-                    const flatFeatureJson = turf.flatten(jsonObject);
-                    features = flatFeatureJson.features;
+                    jsonObject = turf.flatten(jsonObject);
+                    features = jsonObject.features;
                 }
                 geometryLayers[layerid] = features;
                 break;
             case "KML":
                 let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
-                const geoJson: GeoJSON.FeatureCollection<GeoJSON.Geometry | null, GeoJsonProperties> = toGeoJSON.kml(kmlData);
+                let geoJson: GeoJSON.FeatureCollection<GeoJSON.Geometry | null, GeoJsonProperties> = toGeoJSON.kml(kmlData);
                 {
-                    const flatFeatureJson: GeoJSON.FeatureCollection = turf.flatten(geoJson);
-                    features = flatFeatureJson.features;
+                    geoJson = turf.flatten(geoJson);
+                    features = geoJson.features;
                 }
                 geometryLayers[layerid] = features;
                 break;
             case "GPX":
                 let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
-                const gpxGeoGson: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> = toGeoJSON.gpx(gpxData);
+                let gpxGeoGson: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> = toGeoJSON.gpx(gpxData);
                 {
-                    const flatFeatureJson = turf.flatten(gpxGeoGson);
-                    features = flatFeatureJson.features;
+                    gpxGeoGson = turf.flatten(gpxGeoGson);
+                    features = gpxGeoGson.features;
                 }
                 geometryLayers[layerid] = features;
                 break;
@@ -385,10 +384,10 @@ function geometries() {
                 break;
             case "GML":
                 // let gmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
-                const gmlGeoJSON: GeoJSON.FeatureCollection = gml2geojson.parseGML(layerObj.fileContent);
+                let gmlGeoJSON: GeoJSON.FeatureCollection = gml2geojson.parseGML(layerObj.fileContent);
                 {
-                    const flatFeatureJson: FeatureCollection = turf.flatten(gmlGeoJSON);
-                    features = flatFeatureJson.features;
+                    gmlGeoJSON = turf.flatten(gmlGeoJSON);
+                    features = gmlGeoJSON.features;
                 }
                 geometryLayers[layerid] = features;
                 break;
