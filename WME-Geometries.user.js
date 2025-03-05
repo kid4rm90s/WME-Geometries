@@ -493,12 +493,6 @@ function geometries() {
                 if (!f.id) {
                     f.id = layerid + "_" + layerindex.toString();
                 }
-                if (f.geometry.type === "Polygon") {
-                    let first = f.geometry.coordinates[0];
-                    let last = f.geometry.coordinates[f.geometry.coordinates.length - 1];
-                    if (first[0] != last[0] || first[1] !== last[1])
-                        f.geometry.coordinates.push(f.geometry.coordinates[0]);
-                }
                 sdk.Map.addFeatureToLayer({ feature: f, layerName: layerid });
             }
         }
