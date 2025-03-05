@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name                WME Geometries
-// @version             2.0
+// @version             2025.03.05.000
 // @description         Import geometry files into Waze Map Editor. Supports GeoJSON, GML, WKT, KML and GPX.
 // @match               https://www.waze.com/*/editor*
 // @match               https://www.waze.com/editor*
@@ -10,6 +10,7 @@
 // @require             https://unpkg.com/@terraformer/wkt
 // @require             https://cdn.jsdelivr.net/npm/gml2geojson/dist/gml2geojson.js
 // @require             https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js
+// @require             https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @grant               none
 // @author              Timbones
 // @contributor         wlodek76
@@ -18,24 +19,26 @@
 // @namespace           https://greasyfork.org/users/3339
 // @run-at              document-idle
 // ==/UserScript==
+/* global WazeWrap */
 "use strict";
 // import { WmeSDK } from "wme-sdk-typings";
 // import * as toGeoJSON from "@tmcw/togeojson";
 // import * as Terraformer from "@terraformer/wkt";
 // import * as turf from "@turf/turf";
-// import { Feature, GeoJsonProperties, Polygon, MultiPolygon, Geometry } from 'geojson';
+// import { GeoJsonProperties } from 'geojson';
 window.SDK_INITIALIZED.then(geometries);
 function geometries() {
     const GF_LINK = "https://greasyfork.org/en/scripts/8129-wme-geometries";
     const FORUM_LINK = "https://www.waze.com/discuss/t/script-wme-geometries-v1-7-june-2021/291428/8";
-    const RSA_UPDATE_NOTES = `<b>NEW:</b><br>
+    const GEOMETRIES_UPDATE_NOTES = `<b>NEW:</b><br>
     - Converted to WME SDK<br>
     - Added ability to remove individual layers<br>
     - Added ability to select field to display as label for the added shape.
 <b>KNOWN ISSUES:</b><br>
     - Label Property is a radio Button vs ability to select multiple properties.<br>
     - Draw State Boundary is no longer available<br>
-    - Some 3rd Party Data Files may cause issues for display<br><br>
+    - Some 3rd Party Data Files may cause issues for display<br>
+    - 3D Points are not Supported. (LAT, LON, ALT)<br>
 `;
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var defaultLabelName = /^name|name$/;
@@ -116,6 +119,12 @@ function geometries() {
     }
     // add interface to Settings tab
     function init() {
+        if (!WazeWrap.Ready) {
+            setTimeout(() => {
+                init();
+            }, 100);
+            return;
+        }
         var geobox = document.createElement("div");
         geobox.style.paddingTop = "6px";
         console.group();
@@ -153,6 +162,7 @@ function geometries() {
         inputclear.onclick = removeGeometryLayers;
         geoform.appendChild(inputclear);
         loadLayers();
+        WazeWrap.Interface.ShowScriptUpdate(GM_info.script.name, GM_info.script.version, GEOMETRIES_UPDATE_NOTES, GF_LINK, FORUM_LINK);
         console.log("WME Geometries is now available....");
         console.groupEnd();
     }
@@ -343,6 +353,9 @@ function geometries() {
                                 geometry: wktGeoJson.geometries[g],
                             });
                         }
+                        let featureCollection = turf.featureCollection(features);
+                        featureCollection = turf.flatten(featureCollection);
+                        features = featureCollection.features;
                         break;
                     default:
                         let errorMessage = "Unknown Type has been Encountered";
