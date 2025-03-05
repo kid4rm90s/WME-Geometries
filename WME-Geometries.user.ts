@@ -6,7 +6,6 @@
 // @match               https://www.waze.com/editor*
 // @match               https://beta.waze.com/*
 // @exclude             https://www.waze.com/*user/*editor/*
-// @require             https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js
 // @require             https://cdn.jsdelivr.net/npm/@tmcw/togeojson@6.0.0/dist/togeojson.umd.min.js
 // @require             https://unpkg.com/@terraformer/wkt
 // @require             https://cdn.jsdelivr.net/npm/gml2geojson/dist/gml2geojson.js
@@ -15,6 +14,7 @@
 // @author              Timbones
 // @contributor         wlodek76
 // @contributor         Twister-UK
+// @contributor         Karlsosha
 // @namespace           https://greasyfork.org/users/3339
 // @run-at              document-idle
 // ==/UserScript==
@@ -22,15 +22,28 @@
 
 "use strict";
 
-// import { State, WmeSDK } from "wme-sdk-typings";
+// import { WmeSDK } from "wme-sdk-typings";
 // import * as toGeoJSON from "@tmcw/togeojson";
 // import * as Terraformer from "@terraformer/wkt";
 // import * as turf from "@turf/turf";
-// import { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
+// import { Feature, GeoJsonProperties, Polygon, MultiPolygon, Geometry } from 'geojson';
 
 window.SDK_INITIALIZED.then(geometries);
 
 function geometries() {
+    const GF_LINK = "https://greasyfork.org/en/scripts/8129-wme-geometries";
+    const FORUM_LINK = "https://www.waze.com/discuss/t/script-wme-geometries-v1-7-june-2021/291428/8";
+    const RSA_UPDATE_NOTES = `<b>NEW:</b><br>
+    - Converted to WME SDK<br>
+    - Added ability to remove individual layers<br>
+    - Added ability to select field to display as label for the added shape.
+<b>KNOWN ISSUES:</b><br>
+    - Label Property is a radio Button vs ability to select multiple properties.<br>
+    - Draw State Boundary is no longer available<br>
+    - Some 3rd Party Data Files may cause issues for display<br><br>
+`;
+
+
     type MapFormatTypes = "GEOJSON" | "KML" | "WKT" | "GML" | "GMX" | "GPX";
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var defaultLabelName = /^name|name$/;
@@ -178,6 +191,8 @@ function geometries() {
         geoform.appendChild(inputclear);
 
         loadLayers();
+
+        console.log("WME Geometries is now available....");
 
         console.groupEnd();
     }
@@ -566,36 +581,7 @@ function geometries() {
         return false;
     }
 
-    // ------------------------------------------------------------------------------------
-
-    // replace missing functions in OpenLayers 2.13.1
-    // function patchOpenLayers() {
-    //     console.group("WME Geometries: Patching missing features...");
-    //     if (!OpenLayers.VERSION_NUMBER.match(/^Release [0-9.]*$/)) {
-    //         console.error("WME Geometries: OpenLayers version mismatch (" + OpenLayers.VERSION_NUMBER + ") - cannot apply patch");
-    //         return;
-    //     }
-
-    //     loadOLScript("lib/OpenLayers/Format/KML", function() {formats.KML = new OpenLayers.Format.KML(); addFormat("KML");} );
-    //     loadOLScript("lib/OpenLayers/Format/GPX", function() {formats.GPX = new OpenLayers.Format.GPX(); addFormat("GPX");} );
-    //     loadOLScript("lib/OpenLayers/Format/GML", function() {formats.GML = new OpenLayers.Format.GML(); addFormat("GML");} );
-    //     console.groupEnd();
-    // }
 }
-// // ------------------------------------------------------------------------------------
 
-// // https://cdnjs.com/libraries/openlayers/x.y.z/
-// function loadOLScript(filename, callback) {
-//     var version = OpenLayers.VERSION_NUMBER.replace(/Release /, '');
-//     console.info("Loading openlayers/" + version + "/" + filename + ".js");
-
-//     var openlayers = document.createElement('script');
-//     openlayers.src = "https://cdnjs.cloudflare.com/ajax/libs/openlayers/" + version + "/" + filename + ".js";
-//     openlayers.type = "text/javascript";
-//     openlayers.onload = callback;
-//     document.head.appendChild(openlayers);
-// }
-
-// geometries();
 
 // // ------------------------------------------------------------------------------------
