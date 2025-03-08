@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name                WME Geometries
-// @version             2025.03.05.002
+// @version             2025.03.08.001
 // @description         Import geometry files into Waze Map Editor. Supports GeoJSON, GML, WKT, KML and GPX.
 // @match               https://www.waze.com/*/editor*
 // @match               https://www.waze.com/editor*
@@ -30,15 +30,23 @@ window.SDK_INITIALIZED.then(geometries);
 function geometries() {
     const GF_LINK = "https://greasyfork.org/en/scripts/8129-wme-geometries";
     const FORUM_LINK = "https://www.waze.com/discuss/t/script-wme-geometries-v1-7-june-2021/291428/8";
-    const GEOMETRIES_UPDATE_NOTES = `<b>NEW:</b><br>
-    - Converted to WME SDK<br>
-    - Added ability to remove individual layers<br>
-    - Added ability to select field to display as label for the added shape.
+    const GEOMETRIES_UPDATE_NOTES = `<b>WME Geometries</b><br>
+    - Combined script based on SDK version.<br>
+    - Import geometry files into Waze Map Editor. Supports GeoJSON, GML, WKT, KML and GPX.<br>
+    - Supports layer removal and label selection from feature properties.<br>
+<b>NEW in SDK Version:</b><br>
+    - Converted to WME SDK for better compatibility and features.<br>
+    - Added ability to remove individual layers.<br>
+    - Added ability to select field to display as label for the added shape.<br>
+<b>FIXES & IMPROVEMENTS:</b><br>
+    - <b>Color Cycling Fixed:</b> Layer colors now cycle correctly through the defined list and reuse colors after layer removal.<br>
+    - <b>KML/GPX Simplification:</b> Added geometry simplification for KML and GPX files to potentially improve loading of large or complex files.<br>
+    - <b>3D Coordinate Fix:</b>  Removed 3D coordinate (altitude) information from geometries to prevent errors with the WME SDK.<br>
+    - <b>"Clear All" Fix:</b> Resolved issue where "Clear All" button was not always removing layers from the map display.<br>
 <b>KNOWN ISSUES:</b><br>
     - Label Property is a radio Button vs ability to select multiple properties.<br>
     - Draw State Boundary is no longer available<br>
     - Some 3rd Party Data Files may cause issues for display<br>
-    - 3D Points are not Supported. (LAT, LON, ALT)<br>
 `;
     // show labels using first attribute that starts or ends with 'name' (case insensitive regexp)
     var defaultLabelName = /^name|name$/;
@@ -52,7 +60,7 @@ function geometries() {
         "navy",
         "maroon",
     ]);
-    let usedColors = new Set();
+    let usedColors = []; // Changed to Array for ordered color management
     // Id of div element for Checkboxes:
     const checkboxListID = "geometries-cb-list-id";
     let geometryLayers = {};
@@ -188,6 +196,23 @@ function geometries() {
     //     var obj = new layerStoreObj(json, "grey", "GEOJSON", layerName);
     //     parseFile(obj);
     // }
+    // Color Management Functions
+    function getColor() {
+        if (colorList.size === 0) {
+            return null; // No colors left
+        }
+        const availableColors = Array.from(colorList); // Convert Set to Array for ordered access
+        const color = availableColors[0]; // Get the first color in the array (maintains order)
+        colorList.delete(color);
+        usedColors.push(color); // Add to usedColors array
+        return color;
+    }
+    function releaseColor(color) {
+        if (color && usedColors.includes(color)) {
+            colorList.add(color); // Add back to colorList Set
+            usedColors = usedColors.filter(c => c !== color); // Remove from usedColors array
+        }
+    }
     // import selected file as a vector layer
     function addGeometryLayer() {
         // get the selected file from user
@@ -201,6 +226,7 @@ function geometries() {
     function processGeometryFile(file) {
         if (colorList.size === 0) {
             console.error("Cannot add Any more Layers at this point");
+            return;
         }
         var fileext = file?.name?.split(".").pop();
         var filename = file?.name?.replace("." + fileext, "");
@@ -208,12 +234,14 @@ function geometries() {
             return;
         fileext = fileext ? fileext.toUpperCase() : "";
         // add list item
-        var color = colorList.values().next().value;
+        // var color: string | undefined = colorList.values().next().value;
+        var color = getColor(); // Get color using getColor function
         if (!color) {
             console.error("Cannot add Any more Layers at this point");
+            return;
         }
-        colorList.delete(color);
-        usedColors.add(color);
+        //colorList.delete(color);
+        //usedColors.add(color);
         var fileitem = document.createElement("li");
         fileitem.id = file.name.toLowerCase();
         fileitem.style.color = color;
@@ -237,7 +265,8 @@ function geometries() {
                 var tObj = new LayerStoreObj(e.target.result, color, fileext, filename);
                 parseFile(tObj);
                 let filenames = JSON.parse(localStorage.getItem("WMEGeoLayers") || "[]");
-                filenames[color] = theFile;
+                filenames[filename + "." + fileext] = tObj; // Store LayerStoreObj directly
+                // filenames[color] = theFile;
                 localStorage.setItem("WMEGeoLayers", JSON.stringify(filenames));
             };
         })(file);
@@ -293,18 +322,46 @@ function geometries() {
             ],
         },
     };
+    /**
+ * Recursively removes altitude (Z-coordinate) from GeoJSON geometry coordinates.
+ * @param {GeoJSON.Geometry} geometry - The GeoJSON geometry object to process.
+ * @returns {GeoJSON.Geometry} - The geometry object with 2D coordinates.
+ */
+    function removeAltitudeFromCoordinates(geometry) {
+        if (!geometry || !geometry.coordinates) {
+            return geometry; // Return if no geometry or coordinates
+        }
+        if (Array.isArray(geometry.coordinates)) {
+            geometry.coordinates = geometry.coordinates.map(coordinate => {
+                if (Array.isArray(coordinate) && typeof coordinate[0] === 'number' && typeof coordinate[1] === 'number') {
+                    return [coordinate[0], coordinate[1]]; // Keep only first two elements (lon, lat)
+                }
+                else if (Array.isArray(coordinate)) {
+                    return removeAltitudeFromCoordinates({ coordinates: coordinate }).coordinates; // Recursive call for nested arrays
+                }
+                return coordinate;
+            });
+        }
+        return geometry;
+    }
     // Renders a layer object
     function parseFile(layerObj) {
+        // **DEBUGGING LOGS for Layer ID Issue**
+        console.log("parseFile: layerindex before increment:", layerindex);
         // add a new layer for the geometry
         var layerid = "wme_geometry_" + ++layerindex;
+        console.log("parseFile: layerindex after increment:", layerindex);
+        console.log("parseFile: layerid generated:", layerid);
         sdk.Map.addLayer({
             layerName: layerid,
             styleRules: layerConfig.defaultRule.styleRules,
             styleContext: layerConfig.defaultRule.styleContext,
         });
+        geometryLayers[layerid] = true;
         sdk.Map.setLayerVisibility({ layerName: layerid, visibility: true });
         sdk.LayerSwitcher.addLayerCheckbox({ name: layerid });
         let features = [];
+        const simplifyTolerance = 0.0001; // Adjust as needed for simplification
         switch (layerObj.formatType) {
             case "GEOJSON":
                 let jsonObject = JSON.parse(layerObj.fileContent);
@@ -312,25 +369,41 @@ function geometries() {
                     jsonObject = turf.flatten(jsonObject);
                     features = jsonObject.features;
                 }
-                geometryLayers[layerid] = features;
+                // geometryLayers[layerid] = features;
                 break;
             case "KML":
                 let kmlData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 let geoJson = toGeoJSON.kml(kmlData);
+                if (geoJson?.features) { // Check if features exist before simplification
+                    geoJson.features = geoJson.features.map(feature => {
+                        if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiPolygon' || feature.geometry.type === 'MultiLineString')) {
+                            return turf.simplify(feature, { tolerance: simplifyTolerance, highQuality: false });
+                        }
+                        return feature;
+                    });
+                }
                 {
                     geoJson = turf.flatten(geoJson);
                     features = geoJson.features;
                 }
-                geometryLayers[layerid] = features;
+                // geometryLayers[layerid] = features;
                 break;
             case "GPX":
                 let gpxData = new DOMParser().parseFromString(layerObj.fileContent, "application/xml");
                 let gpxGeoGson = toGeoJSON.gpx(gpxData);
+                if (gpxGeoGson?.features) { // Check if features exist before simplification
+                    gpxGeoGson.features = gpxGeoGson.features.map(feature => {
+                        if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiPolygon' || feature.geometry.type === 'MultiLineString')) {
+                            return turf.simplify(feature, { tolerance: simplifyTolerance, highQuality: false });
+                        }
+                        return feature;
+                    });
+                }
                 {
                     gpxGeoGson = turf.flatten(gpxGeoGson);
                     features = gpxGeoGson.features;
                 }
-                geometryLayers[layerid] = features;
+                // geometryLayers[layerid] = features;
                 break;
             case "WKT":
                 const wktGeoJson = Terraformer.wktToGeoJSON(layerObj.fileContent);
@@ -371,11 +444,18 @@ function geometries() {
                     gmlGeoJSON = turf.flatten(gmlGeoJSON);
                     features = gmlGeoJSON.features;
                 }
-                geometryLayers[layerid] = features;
+                //geometryLayers[layerid] = features;
                 break;
             default:
                 throw new Error(`Format Type: ${layerObj.formatType} is not implemented`);
         }
+        // **NEW: Remove Altitude from Coordinates before adding to SDK Map**
+        features = features.map(feature => {
+            if (feature.geometry) {
+                feature.geometry = removeAltitudeFromCoordinates(feature.geometry);
+            }
+            return feature;
+        });
         // hack in translation:
         // I18n.translations[sdk.Settings.getLocale()].layers.name[layerid] = "WME Geometries: " + layerObj.filename;
         // if (/"EPSG:3857"|:EPSG::3857"/.test(layerObj.fileContent)) {
@@ -433,13 +513,13 @@ function geometries() {
             trigger[0].checked = true;
             trigger.trigger("change");
         }
-        function createClearButton(layerObj, layerid) {
+        function createClearButton(layerObj, layerid, color) {
             let clearButtonObject = document.createElement("button");
             clearButtonObject.textContent = "Clear Layer";
             clearButtonObject.name = "clear-" + (layerObj.fileName + "." + layerObj.fileExt).toLowerCase();
             clearButtonObject.id = "clear-" + layerid;
             clearButtonObject.className = "clear-layer-button";
-            clearButtonObject.style.backgroundColor = layerObj.color;
+            clearButtonObject.style.backgroundColor = color;
             return clearButtonObject;
         }
         // When called as part of loading a new file, the list object will already have been created,
@@ -454,6 +534,7 @@ function geometries() {
         if (features.length === 0) {
             liObj.innerHTML = "No features loaded :(";
             liObj.style.color = "red";
+            releaseColor(layerObj.color); // Release color if no features loaded
         }
         else {
             liObj.innerHTML = layerObj.fileName;
@@ -466,7 +547,7 @@ function geometries() {
                     " features loaded\n" +
                     labelWith;
             liObj.appendChild(layersList);
-            let clearButtonObject = createClearButton(layerObj, layerid);
+            let clearButtonObject = createClearButton(layerObj, layerid, layerObj.color); // Pass color to createClearButton
             liObj.appendChild(clearButtonObject);
             console.info("WME Geometries: Loaded " + liObj.title);
             $(".clear-layer-button").on("click", function () {
@@ -481,8 +562,9 @@ function geometries() {
                         elem?.remove();
                     }
                 }
+                // **FIX: Ensure layerid is used to remove from geometryLayers**
+                delete geometryLayers[clearLayerId]; // Use clearLayerId here
                 sdk.Map.removeLayer({ layerName: clearLayerId });
-                delete geometryLayers[clearLayerId];
                 sdk.LayerSwitcher.removeLayerCheckbox({ name: clearLayerId });
                 let listId = this.textContent?.replace("Clear ", "");
                 if (!listId)
@@ -490,10 +572,9 @@ function geometries() {
                 let elementToRemove = document.getElementById(listId);
                 elementToRemove?.remove();
                 let files = JSON.parse(localStorage.getItem("WMEGeoLayers") || "[]");
-                delete files[this.style.backgroundColor];
+                delete files[this.name.replace("clear-", "")]; // Use button name to delete from localStorage
                 localStorage.setItem("WMEGeoLayers", JSON.stringify(files));
-                usedColors.delete(this.style.backgroundColor);
-                colorList.add(this.style.backgroundColor);
+                releaseColor(this.style.backgroundColor);
                 this.remove();
             });
         }
@@ -524,6 +605,9 @@ function geometries() {
     }
     // clear all
     function removeGeometryLayers() {
+        // **DEBUGGING LOGS for Clear All Issue**
+        console.log("removeGeometryLayers: Starting to clear layers...");
+        console.log("removeGeometryLayers: geometryLayers keys before clear:", Object.keys(geometryLayers));
         for (const l in geometryLayers) {
             sdk.Map.removeLayer({ layerName: l });
             sdk.LayerSwitcher.removeLayerCheckbox({ name: l });
@@ -533,10 +617,11 @@ function geometries() {
         layerindex = 0;
         // Clear the cached layers
         localStorage.removeItem("WMEGeoLayers");
-        for (const c in usedColors) {
-            colorList.add(c);
-        }
-        usedColors.clear();
+        // Release all used colors back to the pool
+        usedColors.forEach(color => colorList.add(color));
+        usedColors = []; // Clear usedColors array
+        console.log("removeGeometryLayers: geometryLayers keys after clear:", Object.keys(geometryLayers));
+        console.log("removeGeometryLayers: Finished clearing layers.");
         return false;
     }
 }
